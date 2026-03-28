@@ -1,6 +1,12 @@
 export const IPC_CHANNELS = {
-  todosList: "todos:list",
-  todosAdd: "todos:add",
-  todosToggle: "todos:toggle",
-  todosRemove: "todos:remove"
+  agentsDetect: "agents:detect",
+  promptRun: "prompt:run",
+  promptStop: "prompt:stop",
+  promptOutput: "prompt:output",
+  dialogSelectDirectory: "dialog:select-directory",
+  settingsGetBaseDir: "settings:get-base-dir",
+  settingsSetBaseDir: "settings:set-base-dir",
+  settingsGetLastDir: "settings:get-last-dir",
+  settingsSetLastDir: "settings:set-last-dir",
+  fsCreateDirectory: "fs:create-directory"
 } as const;

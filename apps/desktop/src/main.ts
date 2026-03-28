@@ -1,14 +1,18 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, nativeImage } from "electron";
+import { promises as fs } from "node:fs";
 import path from "node:path";
 
-import { newTodoInputSchema, todoIdSchema } from "@acme/contracts";
+import { promptInputSchema } from "@acme/contracts";
 
 import { IPC_CHANNELS } from "./ipcChannels";
-import { TodoStore } from "./todoStore";
+import { detectAgents, runPrompt, stopPrompt } from "./agentManager";
+import { SettingsStore } from "./settingsStore";
 
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
+const iconPath = path.join(__dirname, "../assets/icon.png");
 
-let todoStore: TodoStore;
+let mainWindow: BrowserWindow | null = null;
+let settingsStore: SettingsStore;
 
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
@@ -18,6 +22,11 @@ function createWindow(): BrowserWindow {
     minHeight: 620,
     show: false,
     autoHideMenuBar: true,
+    titleBarStyle: "hiddenInset",
+    trafficLightPosition: { x: 16, y: 12 },
+    roundedCorners: true,
+    backgroundColor: "#ffffff",
+    icon: iconPath,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -42,38 +51,82 @@ function createWindow(): BrowserWindow {
 }
 
 function registerIpcHandlers(): void {
-  ipcMain.handle(IPC_CHANNELS.todosList, async () => {
-    return todoStore.list();
+  ipcMain.handle(IPC_CHANNELS.agentsDetect, async () => {
+    return detectAgents();
   });
 
-  ipcMain.handle(IPC_CHANNELS.todosAdd, async (_event, payload: unknown) => {
-    return todoStore.add(newTodoInputSchema.parse(payload));
+  ipcMain.handle(IPC_CHANNELS.promptRun, async (_event, payload: unknown) => {
+    const input = promptInputSchema.parse(payload);
+    const output = runPrompt(input, (update) => {
+      mainWindow?.webContents.send(IPC_CHANNELS.promptOutput, update);
+    });
+    return output;
   });
 
-  ipcMain.handle(IPC_CHANNELS.todosToggle, async (_event, id: unknown) => {
-    return todoStore.toggle(todoIdSchema.parse(id));
+  ipcMain.handle(IPC_CHANNELS.promptStop, async (_event, id: unknown) => {
+    if (typeof id === "string") {
+      stopPrompt(id);
+    }
   });
 
-  ipcMain.handle(IPC_CHANNELS.todosRemove, async (_event, id: unknown) => {
-    return todoStore.remove(todoIdSchema.parse(id));
+  ipcMain.handle(IPC_CHANNELS.dialogSelectDirectory, async () => {
+    if (!mainWindow) return null;
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ["openDirectory"]
+    });
+    if (result.canceled) return null;
+    return result.filePaths[0] ?? null;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.settingsGetBaseDir, async () => {
+    return settingsStore.getBaseDirectory();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.settingsSetBaseDir, async (_event, dir: unknown) => {
+    if (typeof dir === "string") {
+      await settingsStore.setBaseDirectory(dir);
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.settingsGetLastDir, async () => {
+    return settingsStore.getLastOpenedDirectory();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.settingsSetLastDir, async (_event, dir: unknown) => {
+    if (typeof dir === "string") {
+      await settingsStore.setLastOpenedDirectory(dir);
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.fsCreateDirectory, async (_event, fullPath: unknown) => {
+    if (typeof fullPath !== "string" || !fullPath) {
+      throw new Error("Invalid directory path");
+    }
+    await fs.mkdir(fullPath, { recursive: true });
+    return fullPath;
   });
 }
 
 async function bootstrap(): Promise<void> {
-  todoStore = new TodoStore(path.join(app.getPath("userData"), "todos.json"));
-  await todoStore.init();
+  settingsStore = new SettingsStore(path.join(app.getPath("userData"), "settings.json"));
+  await settingsStore.init();
 
   registerIpcHandlers();
-  createWindow();
+  mainWindow = createWindow();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+      mainWindow = createWindow();
     }
   });
 }
 
+app.setName("Snug");
+
 app.whenReady().then(() => {
+  if (process.platform === "darwin" && app.dock) {
+    app.dock.setIcon(nativeImage.createFromPath(iconPath));
+  }
   void bootstrap();
 });
 
