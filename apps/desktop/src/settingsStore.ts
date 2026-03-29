@@ -4,9 +4,10 @@ import path from "node:path";
 interface Settings {
   baseDirectory: string | null;
   lastOpenedDirectory: string | null;
+  authToken: string | null;
 }
 
-const DEFAULTS: Settings = { baseDirectory: null, lastOpenedDirectory: null };
+const DEFAULTS: Settings = { baseDirectory: null, lastOpenedDirectory: null, authToken: null };
 
 export class SettingsStore {
   private settings: Settings = { ...DEFAULTS };
@@ -42,6 +43,20 @@ export class SettingsStore {
 
   public async setLastOpenedDirectory(dir: string): Promise<void> {
     this.settings.lastOpenedDirectory = dir;
+    await this.persist();
+  }
+
+  public getAuthToken(): string | null {
+    return this.settings.authToken;
+  }
+
+  public async setAuthToken(token: string): Promise<void> {
+    this.settings.authToken = token;
+    await this.persist();
+  }
+
+  public async clearAuthToken(): Promise<void> {
+    this.settings.authToken = null;
     await this.persist();
   }
 

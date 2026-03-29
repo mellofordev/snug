@@ -6,6 +6,7 @@ import { promptInputSchema } from "@acme/contracts";
 
 import { IPC_CHANNELS } from "./ipcChannels";
 import { detectAgents, runPrompt, stopPrompt } from "./agentManager";
+import { loginWithGoogle, getSession, logout } from "./authManager";
 import {
   initProject,
   startPlayer,
@@ -19,6 +20,9 @@ import {
 import { SettingsStore } from "./settingsStore";
 
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
+const apiBaseUrl = isDevelopment
+  ? (process.env.SNUG_API_URL ?? "http://localhost:8787")
+  : "https://api.snug.video";
 const iconPath = path.join(__dirname, "../assets/icon.png");
 
 function rendererIndexPath(): string {
@@ -174,6 +178,20 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.projectReadSystemPrompt, async (_event, dir: unknown) => {
     if (typeof dir !== "string") throw new Error("Invalid directory");
     return readSystemPrompt(dir);
+  });
+
+  // ── Auth handlers ─────────────────────────────────────────────────
+
+  ipcMain.handle(IPC_CHANNELS.authLogin, async () => {
+    return loginWithGoogle(apiBaseUrl, settingsStore);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.authGetSession, async () => {
+    return getSession(apiBaseUrl, settingsStore);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.authLogout, async () => {
+    return logout(settingsStore);
   });
 }
 

@@ -17,5 +17,8 @@ export const IPC_CHANNELS = {
   projectRenderProgress: "project:render-progress",
   projectListOutputs: "project:list-outputs",
   projectListCompositions: "project:list-compositions",
-  projectReadSystemPrompt: "project:read-system-prompt"
+  projectReadSystemPrompt: "project:read-system-prompt",
+  authLogin: "auth:login",
+  authGetSession: "auth:get-session",
+  authLogout: "auth:logout"
 } as const;

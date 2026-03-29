@@ -1,15 +1,18 @@
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 import { Composer } from "@/components/composer";
+import { Onboarding } from "@/components/onboarding";
 import { OutputViewer } from "@/components/output-viewer";
 import { SidePanel } from "@/components/side-panel";
 import { TopBar } from "@/components/top-bar";
 import { VideoPreview } from "@/components/video-preview";
 import { useAppState } from "@/hooks/use-app-state";
+import { useAuth } from "@/hooks/use-auth";
 import { useNativeApi } from "@/hooks/use-native-api";
 
 export default function App() {
   const api = useNativeApi();
+  const auth = useAuth(api);
   const state = useAppState(api);
 
   if (!api) {
@@ -23,10 +26,34 @@ export default function App() {
     );
   }
 
+  // Auth loading state
+  if (auth.loading && !auth.user) {
+    return (
+      <main className="flex h-screen items-center justify-center bg-background text-foreground">
+        <div className="flex flex-col items-center gap-3">
+          <span className="size-2 animate-pulse rounded-full bg-muted-foreground" />
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        </div>
+      </main>
+    );
+  }
+
+  // Onboarding gate
+  if (!auth.user) {
+    return (
+      <Onboarding
+        loading={auth.loading}
+        error={auth.error}
+        onLogin={() => void auth.login()}
+      />
+    );
+  }
+
   return (
     <TooltipProvider>
       <main className="flex h-screen bg-background text-foreground">
         <SidePanel
+          user={auth.user}
           recentProjects={state.recentProjects}
           workingDirectory={state.workingDirectory}
           currentRun={state.currentRun}
@@ -43,6 +70,7 @@ export default function App() {
           onSelectDirectory={() => void state.onSelectDirectory()}
           onSetNewProjectName={state.setNewProjectName}
           onCloseSidebarNewProject={() => state.setSidebarNewProjectOpen(false)}
+          onLogout={() => void auth.logout()}
         />
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">

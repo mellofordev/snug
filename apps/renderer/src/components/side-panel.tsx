@@ -1,4 +1,4 @@
-import type { PromptOutput } from "@acme/contracts";
+import type { PromptOutput, User } from "@acme/contracts";
 import { Add01Icon, FolderOpenIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 
@@ -13,6 +13,12 @@ import {
   DialogTitle,
   DialogTrigger
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
   Sidebar,
@@ -42,6 +48,7 @@ function truncatePath(path: string, max = 38) {
 }
 
 interface SidePanelProps {
+  user: User;
   recentProjects: string[];
   workingDirectory: string;
   currentRun: PromptOutput | null;
@@ -58,9 +65,11 @@ interface SidePanelProps {
   onSelectDirectory: () => void;
   onSetNewProjectName: (name: string) => void;
   onCloseSidebarNewProject: () => void;
+  onLogout: () => void;
 }
 
 export function SidePanel({
+  user,
   recentProjects,
   workingDirectory,
   currentRun,
@@ -76,7 +85,8 @@ export function SidePanel({
   onChangeBaseDirectory,
   onSelectDirectory,
   onSetNewProjectName,
-  onCloseSidebarNewProject
+  onCloseSidebarNewProject,
+  onLogout
 }: SidePanelProps) {
   return (
     <SidebarProvider className="min-h-0 w-auto flex-none">
@@ -88,6 +98,35 @@ export function SidePanel({
         >
           <span className="text-sm font-semibold tracking-tight">snug</span>
           <Badge variant="secondary" className="text-[10px]">beta</Badge>
+
+          <div className="ml-auto" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="size-6 overflow-hidden rounded-full ring-1 ring-border transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  {user.picture ? (
+                    <img
+                      src={user.picture}
+                      alt={user.name}
+                      className="size-full object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <span className="flex size-full items-center justify-center bg-muted text-[10px] font-medium text-muted-foreground">
+                      {user.name.charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <div className="px-2 py-1.5">
+                  <p className="truncate text-sm font-medium">{user.name}</p>
+                  <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+                </div>
+                <DropdownMenuItem>Settings</DropdownMenuItem>
+                <DropdownMenuItem onClick={onLogout}>Log out</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </SidebarHeader>
 
         <SidebarContent>

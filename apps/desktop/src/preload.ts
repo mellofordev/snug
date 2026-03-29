@@ -53,6 +53,11 @@ const nativeApi: NativeApi = {
     listOutputs: (dir) => ipcRenderer.invoke(IPC_CHANNELS.projectListOutputs, dir),
     listCompositions: (dir) => ipcRenderer.invoke(IPC_CHANNELS.projectListCompositions, dir),
     readSystemPrompt: (dir) => ipcRenderer.invoke(IPC_CHANNELS.projectReadSystemPrompt, dir)
+  },
+  auth: {
+    login: () => ipcRenderer.invoke(IPC_CHANNELS.authLogin),
+    getSession: () => ipcRenderer.invoke(IPC_CHANNELS.authGetSession),
+    logout: () => ipcRenderer.invoke(IPC_CHANNELS.authLogout)
   }
 };
 

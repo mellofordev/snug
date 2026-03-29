@@ -6,6 +6,7 @@ import type {
   RenderHistoryItem,
   RenderProgress
 } from "./agent";
+import type { User } from "./auth";
 
 export const IPC_CHANNELS = {
   agentsDetect: "agents:detect",
@@ -26,7 +27,10 @@ export const IPC_CHANNELS = {
   projectRenderProgress: "project:render-progress",
   projectListOutputs: "project:list-outputs",
   projectListCompositions: "project:list-compositions",
-  projectReadSystemPrompt: "project:read-system-prompt"
+  projectReadSystemPrompt: "project:read-system-prompt",
+  authLogin: "auth:login",
+  authGetSession: "auth:get-session",
+  authLogout: "auth:logout"
 } as const;
 
 export interface NativeApi {
@@ -63,5 +67,10 @@ export interface NativeApi {
     listOutputs: (dir: string) => Promise<RenderHistoryItem[]>;
     listCompositions: (dir: string) => Promise<CompositionFile[]>;
     readSystemPrompt: (dir: string) => Promise<string>;
+  };
+  auth: {
+    login: () => Promise<User>;
+    getSession: () => Promise<User | null>;
+    logout: () => Promise<void>;
   };
 }
