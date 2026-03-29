@@ -1,30 +1,37 @@
+/// <reference types="webpack-env" />
+import type { ComponentType, FC } from "react";
 import { Composition } from "remotion";
 
-const modules = import.meta.glob("../compositions/*.tsx", { eager: true });
-
 type CompositionModule = {
-  default: React.ComponentType;
+  default: ComponentType;
   fps?: number;
   durationInFrames?: number;
   width?: number;
   height?: number;
 };
 
-export const RemotionRoot: React.FC = () => {
+/**
+ * Remotion CLI bundles this file with webpack. `import.meta.glob` is Vite-only and
+ * throws at render time ({}.glob is not a function). Webpack's require.context
+ * discovers the same composition files the Vite player finds via import.meta.glob.
+ */
+const compositionModules = require.context("../compositions", false, /\.tsx$/);
+
+export const RemotionRoot: FC = () => {
   return (
     <>
-      {Object.entries(modules).map(([filePath, mod]) => {
-        const m = mod as CompositionModule;
-        const name = filePath.replace("../compositions/", "").replace(".tsx", "");
+      {compositionModules.keys().map((key: string) => {
+        const mod = compositionModules(key) as CompositionModule;
+        const name = key.replace(/^\.\//, "").replace(/\.tsx$/, "");
         return (
           <Composition
             key={name}
             id={name}
-            component={m.default}
-            durationInFrames={m.durationInFrames ?? 150}
-            fps={m.fps ?? 30}
-            width={m.width ?? 1920}
-            height={m.height ?? 1080}
+            component={mod.default}
+            durationInFrames={mod.durationInFrames ?? 150}
+            fps={mod.fps ?? 30}
+            width={mod.width ?? 1920}
+            height={mod.height ?? 1080}
           />
         );
       })}

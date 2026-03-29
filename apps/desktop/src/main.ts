@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeImage } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from "electron";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -117,6 +117,16 @@ function registerIpcHandlers(): void {
     return fullPath;
   });
 
+  ipcMain.handle(IPC_CHANNELS.shellOpenPath, async (_event, filePath: unknown) => {
+    if (typeof filePath !== "string" || !filePath) {
+      throw new Error("Invalid file path");
+    }
+    const err = await shell.openPath(filePath);
+    if (err) {
+      throw new Error(err);
+    }
+  });
+
   // ── Project handlers ──────────────────────────────────────────────
 
   ipcMain.handle(IPC_CHANNELS.projectInit, async (_event, dir: unknown) => {
@@ -180,6 +190,10 @@ app.whenReady().then(() => {
     app.dock.setIcon(nativeImage.createFromPath(iconPath));
   }
   void bootstrap();
+});
+
+app.on("before-quit", () => {
+  stopAllPlayers();
 });
 
 app.on("window-all-closed", () => {

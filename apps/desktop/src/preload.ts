@@ -33,6 +33,9 @@ const nativeApi: NativeApi = {
   fs: {
     createDirectory: (fullPath) => ipcRenderer.invoke(IPC_CHANNELS.fsCreateDirectory, fullPath)
   },
+  shell: {
+    openPath: (filePath) => ipcRenderer.invoke(IPC_CHANNELS.shellOpenPath, filePath)
+  },
   project: {
     init: (dir) => ipcRenderer.invoke(IPC_CHANNELS.projectInit, dir),
     startPlayer: (dir) => ipcRenderer.invoke(IPC_CHANNELS.projectStartPlayer, dir),

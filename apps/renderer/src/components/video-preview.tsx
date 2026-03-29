@@ -4,12 +4,13 @@ import type { RenderHistoryItem, RenderProgress } from "@acme/contracts";
 import {
   ArrowDown01Icon,
   ArrowLeft02Icon,
+  History,
   Video01Icon
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -42,6 +43,10 @@ interface VideoPreviewProps {
   onSelectComposition: (id: string) => void;
   /** Called when the composition dropdown opens — refresh list from disk (IPC). */
   onCompositionMenuOpen?: () => void;
+  /** Refresh render output list when the past-renders menu opens. */
+  onRenderHistoryMenuOpen?: () => void;
+  /** Open an exported video in the OS default app (e.g. QuickTime). */
+  onOpenOutputVideo: (filePath: string) => void;
   onRender: (compositionId?: string) => void;
   onBack: () => void;
 }
@@ -54,6 +59,8 @@ export function VideoPreview({
   renderHistory,
   onSelectComposition,
   onCompositionMenuOpen,
+  onRenderHistoryMenuOpen,
+  onOpenOutputVideo,
   onRender,
   onBack
 }: VideoPreviewProps) {
@@ -167,6 +174,37 @@ export function VideoPreview({
             </Badge>
           )}
 
+          <DropdownMenu
+            onOpenChange={(open) => {
+              if (open) onRenderHistoryMenuOpen?.();
+            }}
+          >
+            <DropdownMenuTrigger
+              disabled={renderHistory.length === 0}
+              aria-label="Past renders"
+              className={cn(
+                buttonVariants({ variant: "outline", size: "icon-sm" }),
+                "shrink-0"
+              )}
+            >
+              <HugeiconsIcon icon={History} size={14} />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-52 max-h-64 overflow-y-auto">
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Past renders</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {renderHistory.map((item) => (
+                  <DropdownMenuItem
+                    key={item.path}
+                    onClick={() => onOpenOutputVideo(item.path)}
+                  >
+                    <span className="truncate font-mono text-xs">{item.name}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <Button
             size="sm"
             disabled={!effectiveCompositionId || isRendering}
@@ -188,26 +226,6 @@ export function VideoPreview({
           sandbox="allow-scripts allow-same-origin"
         />
       </div>
-
-      {/* Render history */}
-      {renderHistory.length > 0 && (
-        <div className="shrink-0 border-t border-border">
-          <div className="flex items-center gap-2 overflow-x-auto px-4 py-2">
-            <span className="shrink-0 text-[10px] font-medium text-muted-foreground">
-              Renders:
-            </span>
-            {renderHistory.map((item) => (
-              <Badge
-                key={item.path}
-                variant="outline"
-                className="shrink-0 cursor-default text-[10px]"
-              >
-                {item.name}
-              </Badge>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

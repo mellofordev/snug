@@ -63,6 +63,8 @@ export default function App() {
               renderHistory={state.renderHistory}
               onSelectComposition={state.selectComposition}
               onCompositionMenuOpen={() => void state.refreshCompositions()}
+              onRenderHistoryMenuOpen={() => void state.refreshRenderHistory()}
+              onOpenOutputVideo={(p) => void state.openOutputVideo(p)}
               onRender={(id) => void state.triggerRender(id)}
               onBack={state.switchToOutput}
             />

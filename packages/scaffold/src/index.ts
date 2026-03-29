@@ -15,3 +15,6 @@ export const INIT_SCRIPT = path.join(SCAFFOLD_PACKAGE_ROOT, "scripts", "init-pro
  * Prints the player URL to stdout on success.
  */
 export const PLAYER_SCRIPT = path.join(SCAFFOLD_PACKAGE_ROOT, "scripts", "start-player.sh");
+
+/** Bash script that runs `bun run render` in a project to export one composition to disk. */
+export const RENDER_SCRIPT = path.join(SCAFFOLD_PACKAGE_ROOT, "scripts", "render-composition.sh");

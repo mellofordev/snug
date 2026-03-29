@@ -75,6 +75,8 @@ export interface AppState {
   onPreview: () => Promise<void>;
   selectComposition: (id: string) => void;
   refreshCompositions: () => Promise<void>;
+  refreshRenderHistory: () => Promise<void>;
+  openOutputVideo: (filePath: string) => Promise<void>;
   triggerRender: (compositionId?: string) => Promise<void>;
   startPlayer: () => Promise<void>;
 }
@@ -126,13 +128,16 @@ export function useAppState(api: NativeApi | undefined): AppState {
     }
   }, []);
 
-  // Persist recent projects when working directory changes
+  // Persist project list when working directory changes. Order stays fixed: selecting a project
+  // does not move it; only newly opened or created projects are appended (cap 12, drop oldest).
   useEffect(() => {
     if (!workingDirectory) return;
     try {
       const raw = localStorage.getItem(RECENT_PROJECTS_KEY);
       const prev: string[] = raw ? (JSON.parse(raw) as string[]) : [];
-      const next = [workingDirectory, ...prev.filter((p) => p !== workingDirectory)].slice(0, 12);
+      const next = prev.includes(workingDirectory)
+        ? prev
+        : [...prev, workingDirectory].slice(-12);
       localStorage.setItem(RECENT_PROJECTS_KEY, JSON.stringify(next));
       setRecentProjects(next);
     } catch {
@@ -202,6 +207,15 @@ export function useAppState(api: NativeApi | undefined): AppState {
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
   }, []);
+
+  // Tear down the previous project's Vite preview when the workspace changes, a new project is
+  // opened, or the renderer unmounts — avoids orphan dev servers consuming RAM.
+  useEffect(() => {
+    return () => {
+      if (!api || !workingDirectory) return;
+      void api.project.stopPlayer(workingDirectory);
+    };
+  }, [api, workingDirectory]);
 
   // Reset player state when working directory changes
   useEffect(() => {
@@ -304,6 +318,26 @@ export function useAppState(api: NativeApi | undefined): AppState {
       /* non-fatal */
     }
   }, [api, workingDirectory]);
+
+  const refreshRenderHistory = useCallback(async () => {
+    if (!api || !workingDirectory) return;
+    try {
+      const items = await api.project.listOutputs(workingDirectory);
+      setRenderHistory(items);
+    } catch {
+      /* non-fatal */
+    }
+  }, [api, workingDirectory]);
+
+  const openOutputVideo = useCallback(async (filePath: string) => {
+    if (!api) return;
+    setError(null);
+    try {
+      await api.shell.openPath(filePath);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not open video.");
+    }
+  }, [api]);
 
   // Refresh composition file list from disk whenever preview is shown
   useEffect(() => {
@@ -443,6 +477,8 @@ export function useAppState(api: NativeApi | undefined): AppState {
     onPreview,
     selectComposition: setSelectedComposition,
     refreshCompositions,
+    refreshRenderHistory,
+    openOutputVideo,
     triggerRender,
     startPlayer
   };

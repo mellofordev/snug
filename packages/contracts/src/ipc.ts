@@ -18,6 +18,7 @@ export const IPC_CHANNELS = {
   settingsGetLastDir: "settings:get-last-dir",
   settingsSetLastDir: "settings:set-last-dir",
   fsCreateDirectory: "fs:create-directory",
+  shellOpenPath: "shell:open-path",
   projectInit: "project:init",
   projectStartPlayer: "project:start-player",
   projectStopPlayer: "project:stop-player",
@@ -48,6 +49,10 @@ export interface NativeApi {
   };
   fs: {
     createDirectory: (fullPath: string) => Promise<string>;
+  };
+  shell: {
+    /** Opens a file with the OS default app (e.g. QuickTime for video on macOS). */
+    openPath: (filePath: string) => Promise<void>;
   };
   project: {
     init: (dir: string) => Promise<{ success: boolean; error?: string }>;

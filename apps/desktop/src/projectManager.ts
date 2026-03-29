@@ -1,9 +1,10 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { readFileSync, unlinkSync } from "node:fs";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
 import type { CompositionFile, RenderHistoryItem, RenderProgress } from "@acme/contracts";
-import { INIT_SCRIPT, PLAYER_SCRIPT, TEMPLATE_DIR } from "@acme/scaffold";
+import { INIT_SCRIPT, PLAYER_SCRIPT, RENDER_SCRIPT, TEMPLATE_DIR } from "@acme/scaffold";
 
 // Expand PATH for CLI tools
 function buildEnv(): NodeJS.ProcessEnv {
@@ -112,6 +113,45 @@ function extractDevServerUrl(buffer: string): string | null {
 const runningPlayers = new Map<string, ChildProcess>();
 
 /**
+ * Projects where preview is active (including lock-only "reuse" — no child in `runningPlayers`
+ * after bash exits). Used so app quit / stop-all can kill Vite processes we did not spawn.
+ */
+const previewSessionDirs = new Set<string>();
+
+function registerPreviewSession(dir: string): void {
+  previewSessionDirs.add(dir);
+}
+
+/** Kill Vite for a project: spawned child (if any), then PID from `.snug-player.lock`, then unlink lock. */
+function stopPlayerSync(dir: string): void {
+  previewSessionDirs.delete(dir);
+  const child = runningPlayers.get(dir);
+  if (child) {
+    try {
+      child.kill("SIGTERM");
+    } catch {
+      /* ignore */
+    }
+    runningPlayers.delete(dir);
+  }
+  const lp = lockFilePath(dir);
+  try {
+    const content = readFileSync(lp, "utf8");
+    const lock = parseLock(content);
+    if (lock) {
+      try {
+        process.kill(lock.pid, "SIGTERM");
+      } catch {
+        /* already gone */
+      }
+    }
+    unlinkSync(lp);
+  } catch {
+    /* no lock */
+  }
+}
+
+/**
  * Start the Vite player via scaffold `start-player.sh` (same idea as `init-project.sh`).
  * Script prints SNUG_PLAYER_REUSE + URL when reusing a lock; otherwise execs `bun run player`
  * and Vite logs stream on the same pipes (no log-file buffering).
@@ -165,6 +205,7 @@ export async function startPlayer(dir: string): Promise<{ url: string }> {
         if (url && !settled) {
           settled = true;
           clearTimeout(timeout);
+          registerPreviewSession(dir);
           resolve({ url });
         }
         return;
@@ -177,6 +218,7 @@ export async function startPlayer(dir: string): Promise<{ url: string }> {
       settled = true;
       clearTimeout(timeout);
       void fs.writeFile(lockPath, `pid=${child.pid}\nurl=${url}\n`).catch(() => {});
+      registerPreviewSession(dir);
       resolve({ url });
     }
 
@@ -206,6 +248,7 @@ export async function startPlayer(dir: string): Promise<{ url: string }> {
         if (url) {
           settled = true;
           clearTimeout(timeout);
+          registerPreviewSession(dir);
           resolve({ url });
           return;
         }
@@ -214,6 +257,7 @@ export async function startPlayer(dir: string): Promise<{ url: string }> {
       if (code === 0 && url) {
         settled = true;
         clearTimeout(timeout);
+        registerPreviewSession(dir);
         resolve({ url });
         return;
       }
@@ -229,34 +273,13 @@ export async function startPlayer(dir: string): Promise<{ url: string }> {
 }
 
 export async function stopPlayer(dir: string): Promise<void> {
-  const child = runningPlayers.get(dir);
-  if (child) {
-    child.kill("SIGTERM");
-    runningPlayers.delete(dir);
-  } else {
-    try {
-      const content = await fs.readFile(lockFilePath(dir), "utf-8");
-      const lock = parseLock(content);
-      if (lock) {
-        try {
-          process.kill(lock.pid, "SIGTERM");
-        } catch {
-          /* already gone */
-        }
-      }
-    } catch {
-      /* no lock */
-    }
-  }
-  await fs.unlink(lockFilePath(dir)).catch(() => {});
+  stopPlayerSync(dir);
 }
 
 export function stopAllPlayers(): void {
-  for (const [dir, child] of runningPlayers) {
-    child.kill("SIGTERM");
-    runningPlayers.delete(dir);
-    // Best-effort synchronous lock file removal on app quit
-    try { require("node:fs").unlinkSync(lockFilePath(dir)); } catch { /* ignore */ }
+  const dirs = [...new Set([...runningPlayers.keys(), ...previewSessionDirs])];
+  for (const dir of dirs) {
+    stopPlayerSync(dir);
   }
 }
 
@@ -309,25 +332,16 @@ export async function renderComposition(
 
   onProgress({ status: "rendering", progress: 0 });
 
-  const child = spawn(
-    "bunx",
-    [
-      "remotion",
-      "render",
-      "src/index.ts",
-      compositionId,
-      "--output",
-      outputPath
-    ],
-    {
-      cwd: dir,
-      env: buildEnv(),
-      stdio: ["ignore", "pipe", "pipe"]
-    }
-  );
+  const child = spawn("bash", [RENDER_SCRIPT, dir, compositionId, outputPath], {
+    env: buildEnv(),
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+
+  let renderLog = "";
 
   child.stdout?.on("data", (chunk: Buffer) => {
     const text = chunk.toString();
+    renderLog += text;
     // Remotion outputs progress like "(45%)" or "Rendering - 45% done"
     const match = text.match(/(\d+)%/);
     const pct = match?.[1];
@@ -341,6 +355,7 @@ export async function renderComposition(
 
   child.stderr?.on("data", (chunk: Buffer) => {
     const text = chunk.toString();
+    renderLog += text;
     const match = text.match(/(\d+)%/);
     const pct = match?.[1];
     if (pct !== undefined) {
@@ -359,10 +374,13 @@ export async function renderComposition(
         outputPath
       });
     } else {
+      const tail = renderLog.trim().slice(-2000);
       onProgress({
         status: "failed",
         progress: 0,
-        error: `Render failed with exit code ${code}`
+        error: tail
+          ? `Render failed (exit ${code}):\n${tail}`
+          : `Render failed with exit code ${code}`
       });
     }
   });
