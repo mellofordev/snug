@@ -1,0 +1,414 @@
+import { spawn, type ChildProcess } from "node:child_process";
+import { promises as fs } from "node:fs";
+import path from "node:path";
+
+import type { CompositionFile, RenderHistoryItem, RenderProgress } from "@acme/contracts";
+import { INIT_SCRIPT, PLAYER_SCRIPT, TEMPLATE_DIR } from "@acme/scaffold";
+
+// Expand PATH for CLI tools
+function buildEnv(): NodeJS.ProcessEnv {
+  const extraPaths = [
+    "/usr/local/bin",
+    "/usr/bin",
+    "/bin",
+    "/opt/homebrew/bin",
+    `${process.env.HOME}/.npm-global/bin`,
+    `${process.env.HOME}/.local/bin`,
+    `${process.env.HOME}/.bun/bin`,
+    `${process.env.HOME}/.nvm/versions/node/current/bin`
+  ].join(":");
+
+  return {
+    ...process.env,
+    PATH: `${extraPaths}:${process.env.PATH ?? ""}`
+  };
+}
+
+// ── Project Initialization ──────────────────────────────────────────────
+
+export async function initProject(
+  dir: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn("bash", [INIT_SCRIPT, dir, TEMPLATE_DIR], {
+        env: buildEnv(),
+        stdio: ["ignore", "pipe", "pipe"]
+      });
+
+      let stderr = "";
+      let stdout = "";
+      child.stdout?.on("data", (chunk: Buffer) => {
+        stdout += chunk.toString();
+      });
+      child.stderr?.on("data", (chunk: Buffer) => {
+        stderr += chunk.toString();
+      });
+
+      child.on("close", (code) => {
+        if (code === 0) resolve();
+        else {
+          const detail = [stdout.trim(), stderr.trim()].filter(Boolean).join("\n");
+          reject(
+            new Error(
+              detail
+                ? `init-project.sh failed (exit ${code}):\n${detail}`
+                : `init-project.sh failed (exit ${code})`
+            )
+          );
+        }
+      });
+
+      child.on("error", (err) => {
+        reject(new Error(`Failed to run init-project.sh: ${err.message}`));
+      });
+    });
+
+    return { success: true };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Unknown error during project init"
+    };
+  }
+}
+
+// ── Player Management ───────────────────────────────────────────────────
+// Preview: spawn bash + PLAYER_SCRIPT from @acme/scaffold (same pattern as init-project.sh).
+// Renderer calls IPC project:start-player → main runs the script; contracts only define channel names.
+
+const LOCK_FILENAME = ".snug-player.lock";
+
+function lockFilePath(dir: string): string {
+  return path.join(dir, LOCK_FILENAME);
+}
+
+function parseLock(content: string): { pid: number; url: string } | null {
+  const pid = parseInt((content.match(/^pid=(\d+)/m) ?? [])[1] ?? "", 10);
+  const url = (content.match(/^url=(https?:\/\/.+)/m) ?? [])[1] ?? "";
+  if (!isNaN(pid) && pid > 0 && url.startsWith("http")) return { pid, url };
+  return null;
+}
+
+/** Strip ANSI escape sequences (Vite colors its Local: URL line). */
+function stripAnsi(s: string): string {
+  return s.replace(/\u001b\[[0-9;]*m/g, "");
+}
+
+/**
+ * Find a dev-server URL in accumulated Vite output.
+ * Must run on a buffer because the URL is often split across stdout chunks.
+ */
+const DEV_SERVER_URL =
+  /https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\]|::1):\d+(?:\/[^\s]*)?/;
+
+function extractDevServerUrl(buffer: string): string | null {
+  const clean = stripAnsi(buffer);
+  const m = clean.match(DEV_SERVER_URL);
+  return m ? m[0].replace(/\/$/, "") : null;
+}
+
+/** Child processes started this session, keyed by project dir. */
+const runningPlayers = new Map<string, ChildProcess>();
+
+/**
+ * Start the Vite player via scaffold `start-player.sh` (same idea as `init-project.sh`).
+ * Script prints SNUG_PLAYER_REUSE + URL when reusing a lock; otherwise execs `bun run player`
+ * and Vite logs stream on the same pipes (no log-file buffering).
+ */
+export async function startPlayer(dir: string): Promise<{ url: string }> {
+  const lockPath = lockFilePath(dir);
+
+  const existing = runningPlayers.get(dir);
+  if (existing) {
+    existing.kill("SIGTERM");
+    runningPlayers.delete(dir);
+  }
+
+  return new Promise((resolve, reject) => {
+    const child = spawn("bash", [PLAYER_SCRIPT, dir], {
+      env: buildEnv(),
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+
+    runningPlayers.set(dir, child);
+    let settled = false;
+    let outBuf = "";
+    let errBuf = "";
+
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill("SIGTERM");
+      runningPlayers.delete(dir);
+      const tail = stripAnsi((outBuf + errBuf).slice(-4000));
+      reject(
+        new Error(
+          tail.trim()
+            ? `Player startup timed out. Last output:\n${tail}`
+            : "Player startup timed out (no Vite URL in stdout/stderr)."
+        )
+      );
+    }, 90_000);
+
+    const settleErr = (message: string) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      reject(new Error(message));
+    };
+
+    function tryParseReuseOrUrl(): void {
+      const combined = outBuf + errBuf;
+      if (combined.includes("SNUG_PLAYER_REUSE")) {
+        const url = extractDevServerUrl(combined);
+        if (url && !settled) {
+          settled = true;
+          clearTimeout(timeout);
+          resolve({ url });
+        }
+        return;
+      }
+      const url = extractDevServerUrl(combined);
+      if (!url || settled) return;
+      const stillRunning =
+        child.exitCode === null && child.signalCode === null && typeof child.pid === "number";
+      if (!stillRunning) return;
+      settled = true;
+      clearTimeout(timeout);
+      void fs.writeFile(lockPath, `pid=${child.pid}\nurl=${url}\n`).catch(() => {});
+      resolve({ url });
+    }
+
+    const onChunk = (chunk: Buffer, which: "out" | "err") => {
+      const text = chunk.toString();
+      if (which === "out") outBuf += text;
+      else errBuf += text;
+      if (outBuf.length > 256_000) outBuf = outBuf.slice(-128_000);
+      if (errBuf.length > 256_000) errBuf = errBuf.slice(-128_000);
+      tryParseReuseOrUrl();
+    };
+
+    child.stdout?.on("data", (c) => onChunk(c, "out"));
+    child.stderr?.on("data", (c) => onChunk(c, "err"));
+
+    child.on("error", (err) => {
+      runningPlayers.delete(dir);
+      settleErr(`Failed to start player: ${err.message}`);
+    });
+
+    child.on("close", (code) => {
+      runningPlayers.delete(dir);
+      if (settled) return;
+      const combined = outBuf + errBuf;
+      if (code === 0 && combined.includes("SNUG_PLAYER_REUSE")) {
+        const url = extractDevServerUrl(combined);
+        if (url) {
+          settled = true;
+          clearTimeout(timeout);
+          resolve({ url });
+          return;
+        }
+      }
+      const url = extractDevServerUrl(combined);
+      if (code === 0 && url) {
+        settled = true;
+        clearTimeout(timeout);
+        resolve({ url });
+        return;
+      }
+      void fs.unlink(lockPath).catch(() => {});
+      const tail = stripAnsi(combined.slice(-4000));
+      settleErr(
+        tail.trim()
+          ? `Player exited with code ${code}:\n${tail}`
+          : `Player exited with code ${code}`
+      );
+    });
+  });
+}
+
+export async function stopPlayer(dir: string): Promise<void> {
+  const child = runningPlayers.get(dir);
+  if (child) {
+    child.kill("SIGTERM");
+    runningPlayers.delete(dir);
+  } else {
+    try {
+      const content = await fs.readFile(lockFilePath(dir), "utf-8");
+      const lock = parseLock(content);
+      if (lock) {
+        try {
+          process.kill(lock.pid, "SIGTERM");
+        } catch {
+          /* already gone */
+        }
+      }
+    } catch {
+      /* no lock */
+    }
+  }
+  await fs.unlink(lockFilePath(dir)).catch(() => {});
+}
+
+export function stopAllPlayers(): void {
+  for (const [dir, child] of runningPlayers) {
+    child.kill("SIGTERM");
+    runningPlayers.delete(dir);
+    // Best-effort synchronous lock file removal on app quit
+    try { require("node:fs").unlinkSync(lockFilePath(dir)); } catch { /* ignore */ }
+  }
+}
+
+// ── Composition Listing ─────────────────────────────────────────────────
+
+export async function listCompositions(dir: string): Promise<CompositionFile[]> {
+  const compositionsDir = path.join(dir, "compositions");
+  try {
+    const entries = await fs.readdir(compositionsDir, { withFileTypes: true });
+    return entries
+      .filter((e) => e.isFile() && e.name.endsWith(".tsx"))
+      .map((e) => ({
+        name: e.name.replace(".tsx", ""),
+        path: path.join(compositionsDir, e.name)
+      }));
+  } catch {
+    return [];
+  }
+}
+
+// ── Video Rendering ─────────────────────────────────────────────────────
+
+export async function renderComposition(
+  dir: string,
+  compositionId: string,
+  onProgress: (progress: RenderProgress) => void
+): Promise<void> {
+  // Determine next output number
+  const outputDir = path.join(dir, "output");
+  await fs.mkdir(outputDir, { recursive: true });
+
+  let nextNum = 1;
+  try {
+    const files = await fs.readdir(outputDir);
+    const numbers = files
+      .filter((f) => f.startsWith("snug-out-") && f.endsWith(".mp4"))
+      .map((f) => {
+        const match = f.match(/snug-out-(\d+)\.mp4/);
+        return match?.[1] ? parseInt(match[1], 10) : 0;
+      });
+    if (numbers.length > 0) {
+      nextNum = Math.max(...numbers) + 1;
+    }
+  } catch {
+    // output dir might be empty
+  }
+
+  const outputFileName = `snug-out-${nextNum}.mp4`;
+  const outputPath = path.join(outputDir, outputFileName);
+
+  onProgress({ status: "rendering", progress: 0 });
+
+  const child = spawn(
+    "bunx",
+    [
+      "remotion",
+      "render",
+      "src/index.ts",
+      compositionId,
+      "--output",
+      outputPath
+    ],
+    {
+      cwd: dir,
+      env: buildEnv(),
+      stdio: ["ignore", "pipe", "pipe"]
+    }
+  );
+
+  child.stdout?.on("data", (chunk: Buffer) => {
+    const text = chunk.toString();
+    // Remotion outputs progress like "(45%)" or "Rendering - 45% done"
+    const match = text.match(/(\d+)%/);
+    const pct = match?.[1];
+    if (pct !== undefined) {
+      onProgress({
+        status: "rendering",
+        progress: parseInt(pct, 10) / 100
+      });
+    }
+  });
+
+  child.stderr?.on("data", (chunk: Buffer) => {
+    const text = chunk.toString();
+    const match = text.match(/(\d+)%/);
+    const pct = match?.[1];
+    if (pct !== undefined) {
+      onProgress({
+        status: "rendering",
+        progress: parseInt(pct, 10) / 100
+      });
+    }
+  });
+
+  child.on("close", (code) => {
+    if (code === 0) {
+      onProgress({
+        status: "completed",
+        progress: 1,
+        outputPath
+      });
+    } else {
+      onProgress({
+        status: "failed",
+        progress: 0,
+        error: `Render failed with exit code ${code}`
+      });
+    }
+  });
+
+  child.on("error", (err) => {
+    onProgress({
+      status: "failed",
+      progress: 0,
+      error: `Render error: ${err.message}`
+    });
+  });
+}
+
+// ── Output History ──────────────────────────────────────────────────────
+
+export async function listOutputs(dir: string): Promise<RenderHistoryItem[]> {
+  const outputDir = path.join(dir, "output");
+  try {
+    const entries = await fs.readdir(outputDir, { withFileTypes: true });
+    const items: RenderHistoryItem[] = [];
+
+    for (const entry of entries) {
+      if (entry.isFile() && entry.name.startsWith("snug-out-") && entry.name.endsWith(".mp4")) {
+        const fullPath = path.join(outputDir, entry.name);
+        const stat = await fs.stat(fullPath);
+        items.push({
+          name: entry.name,
+          path: fullPath,
+          createdAt: stat.birthtime.toISOString()
+        });
+      }
+    }
+
+    return items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  } catch {
+    return [];
+  }
+}
+
+// ── System Prompt ───────────────────────────────────────────────────────
+
+export async function readSystemPrompt(dir: string): Promise<string> {
+  const promptPath = path.join(dir, "system-prompt", "prompt.md");
+  try {
+    return await fs.readFile(promptPath, "utf-8");
+  } catch {
+    return "";
+  }
+}

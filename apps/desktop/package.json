@@ -5,15 +5,16 @@
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "concurrently -k -n BUNDLE,ELECTRON \"bun run dev:bundle\" \"bun run dev:electron\"",
-    "dev:bundle": "tsup src/main.ts src/preload.ts --format cjs --out-dir dist-electron --sourcemap --watch --clean",
+    "dev:bundle": "tsup src/main.ts src/preload.ts --format cjs --out-dir dist-electron --sourcemap --watch --clean --external @acme/scaffold",
     "dev:electron": "bun run scripts/dev-electron.mjs",
-    "build": "tsup src/main.ts src/preload.ts --format cjs --out-dir dist-electron --sourcemap --clean",
+    "build": "tsup src/main.ts src/preload.ts --format cjs --out-dir dist-electron --sourcemap --clean --external @acme/scaffold",
     "start": "electron dist-electron/main.js",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
     "@acme/contracts": "workspace:*",
+    "@acme/scaffold": "workspace:*",
     "electron": "^33.3.0"
   },
   "devDependencies": {

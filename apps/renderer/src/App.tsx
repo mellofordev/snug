@@ -4,6 +4,7 @@ import { Composer } from "@/components/composer";
 import { OutputViewer } from "@/components/output-viewer";
 import { SidePanel } from "@/components/side-panel";
 import { TopBar } from "@/components/top-bar";
+import { VideoPreview } from "@/components/video-preview";
 import { useAppState } from "@/hooks/use-app-state";
 import { useNativeApi } from "@/hooks/use-native-api";
 
@@ -34,8 +35,9 @@ export default function App() {
           sidebarNewProjectOpen={state.sidebarNewProjectOpen}
           newProjectName={state.newProjectName}
           creatingProject={state.creatingProject}
+          createStage={state.createStage}
           onSelectProject={(path) => void state.setAndPersistDirectory(path)}
-          onNewProject={() => void state.onNewProject()}
+          onNewProject={state.onNewProject}
           onCreateProject={() => void state.onCreateProject()}
           onChangeBaseDirectory={() => void state.onChangeBaseDirectory()}
           onSelectDirectory={() => void state.onSelectDirectory()}
@@ -52,10 +54,28 @@ export default function App() {
             </div>
           )}
 
-          <OutputViewer
-            currentRun={state.currentRun}
-            isRunning={state.isRunning}
-          />
+          {state.view === "preview" && state.playerUrl ? (
+            <VideoPreview
+              playerUrl={state.playerUrl}
+              compositions={state.compositions}
+              selectedComposition={state.selectedComposition}
+              renderProgress={state.renderProgress}
+              renderHistory={state.renderHistory}
+              onSelectComposition={state.selectComposition}
+              onCompositionMenuOpen={() => void state.refreshCompositions()}
+              onRender={(id) => void state.triggerRender(id)}
+              onBack={state.switchToOutput}
+            />
+          ) : (
+            <OutputViewer
+              currentRun={state.currentRun}
+              isRunning={state.isRunning}
+              playerRunning={state.playerRunning}
+              playerStarting={state.playerStarting}
+              workingDirectory={state.workingDirectory}
+              onPreview={state.onPreview}
+            />
+          )}
 
           <Composer
             prompt={state.prompt}
