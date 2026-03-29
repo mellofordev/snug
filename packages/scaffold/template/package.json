@@ -10,16 +10,16 @@
   "dependencies": {
     "@remotion/cli": "^4.0.441",
     "@remotion/player": "^4.0.441",
+    "@vitejs/plugin-react": "^4.3.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "remotion": "^4.0.441"
+    "remotion": "^4.0.441",
+    "vite": "^6.0.5"
   },
   "devDependencies": {
     "@types/webpack-env": "^1.18.8",
     "@types/react": "^18.3.13",
     "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^4.3.4",
-    "typescript": "^5.7.3",
-    "vite": "^6.0.5"
+    "typescript": "^5.7.3"
   }
 }

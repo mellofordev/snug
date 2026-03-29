@@ -1,10 +1,25 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { readFileSync, unlinkSync } from "node:fs";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
 import type { CompositionFile, RenderHistoryItem, RenderProgress } from "@acme/contracts";
-import { INIT_SCRIPT, PLAYER_SCRIPT, RENDER_SCRIPT, TEMPLATE_DIR } from "@acme/scaffold";
+import { INIT_SCRIPT, RENDER_SCRIPT, TEMPLATE_DIR } from "@acme/scaffold";
+
+/**
+ * `spawn` cannot execute paths inside `app.asar`. electron-builder mirrors unpacked
+ * files under `app.asar.unpacked` (see `asarUnpack` in package.json).
+ */
+function resourcePathForExec(absPath: string): string {
+  const needle = `${path.sep}app.asar${path.sep}`;
+  if (!absPath.includes(needle)) return absPath;
+  const candidate = absPath.replace(needle, `${path.sep}app.asar.unpacked${path.sep}`);
+  return existsSync(candidate) ? candidate : absPath;
+}
+
+const resolvedInitScript = resourcePathForExec(INIT_SCRIPT);
+const resolvedRenderScript = resourcePathForExec(RENDER_SCRIPT);
+const resolvedTemplateDir = resourcePathForExec(TEMPLATE_DIR);
 
 // Expand PATH for CLI tools
 function buildEnv(): NodeJS.ProcessEnv {
@@ -25,14 +40,45 @@ function buildEnv(): NodeJS.ProcessEnv {
   };
 }
 
+/** Normalize and validate project paths so preview/render never run against Electron's cwd by mistake. */
+function resolveProjectRoot(dir: string): string {
+  const trimmed = dir.trim();
+  if (!trimmed) {
+    throw new Error("Project directory is empty — open or create a project first.");
+  }
+  if (!path.isAbsolute(trimmed)) {
+    throw new Error(`Project directory must be an absolute path, got: ${dir}`);
+  }
+  return path.resolve(trimmed);
+}
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // ── Project Initialization ──────────────────────────────────────────────
 
 export async function initProject(
   dir: string
 ): Promise<{ success: boolean; error?: string }> {
+  let root: string;
+  try {
+    root = resolveProjectRoot(dir);
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Invalid project directory"
+    };
+  }
+
   try {
     await new Promise<void>((resolve, reject) => {
-      const child = spawn("bash", [INIT_SCRIPT, dir, TEMPLATE_DIR], {
+      const child = spawn("bash", [resolvedInitScript, root, resolvedTemplateDir], {
         env: buildEnv(),
         stdio: ["ignore", "pipe", "pipe"]
       });
@@ -75,8 +121,8 @@ export async function initProject(
 }
 
 // ── Player Management ───────────────────────────────────────────────────
-// Preview: spawn bash + PLAYER_SCRIPT from @acme/scaffold (same pattern as init-project.sh).
-// Renderer calls IPC project:start-player → main runs the script; contracts only define channel names.
+// Preview: `bun run player` in the project root with an explicit cwd (no shell script) so packaged
+// Electron never runs Bun against the wrong directory. Lock reuse is handled here in TypeScript.
 
 const LOCK_FILENAME = ".snug-player.lock";
 
@@ -152,26 +198,59 @@ function stopPlayerSync(dir: string): void {
 }
 
 /**
- * Start the Vite player via scaffold `start-player.sh` (same idea as `init-project.sh`).
- * Script prints SNUG_PLAYER_REUSE + URL when reusing a lock; otherwise execs `bun run player`
- * and Vite logs stream on the same pipes (no log-file buffering).
+ * Start the Vite dev server (`bun run player`) in `dir` with `cwd` set to the resolved project root.
  */
 export async function startPlayer(dir: string): Promise<{ url: string }> {
-  const lockPath = lockFilePath(dir);
+  const root = resolveProjectRoot(dir);
+  const pkgPath = path.join(root, "package.json");
+  if (!existsSync(pkgPath)) {
+    throw new Error(`Not a Snug project (no package.json): ${root}`);
+  }
 
-  const existing = runningPlayers.get(dir);
+  let pkg: { scripts?: Record<string, string> };
+  try {
+    pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { scripts?: Record<string, string> };
+  } catch {
+    throw new Error(`Invalid package.json in ${root}`);
+  }
+  if (!pkg.scripts?.player?.trim()) {
+    throw new Error(
+      `This project's package.json has no "player" script. Add "player": "vite" or re-create the project with the latest Snug scaffold.`
+    );
+  }
+
+  const lockPath = lockFilePath(root);
+
+  const existing = runningPlayers.get(root);
   if (existing) {
     existing.kill("SIGTERM");
-    runningPlayers.delete(dir);
+    runningPlayers.delete(root);
+  }
+
+  try {
+    const content = readFileSync(lockPath, "utf8");
+    const lock = parseLock(content);
+    if (lock && isProcessAlive(lock.pid)) {
+      registerPreviewSession(root);
+      return { url: lock.url };
+    }
+  } catch {
+    /* no lock file */
+  }
+  try {
+    unlinkSync(lockPath);
+  } catch {
+    /* no stale lock */
   }
 
   return new Promise((resolve, reject) => {
-    const child = spawn("bash", [PLAYER_SCRIPT, dir], {
+    const child = spawn("bun", ["run", "player"], {
+      cwd: root,
       env: buildEnv(),
       stdio: ["ignore", "pipe", "pipe"]
     });
 
-    runningPlayers.set(dir, child);
+    runningPlayers.set(root, child);
     let settled = false;
     let outBuf = "";
     let errBuf = "";
@@ -180,7 +259,7 @@ export async function startPlayer(dir: string): Promise<{ url: string }> {
       if (settled) return;
       settled = true;
       child.kill("SIGTERM");
-      runningPlayers.delete(dir);
+      runningPlayers.delete(root);
       const tail = stripAnsi((outBuf + errBuf).slice(-4000));
       reject(
         new Error(
@@ -198,18 +277,8 @@ export async function startPlayer(dir: string): Promise<{ url: string }> {
       reject(new Error(message));
     };
 
-    function tryParseReuseOrUrl(): void {
+    function tryParseUrl(): void {
       const combined = outBuf + errBuf;
-      if (combined.includes("SNUG_PLAYER_REUSE")) {
-        const url = extractDevServerUrl(combined);
-        if (url && !settled) {
-          settled = true;
-          clearTimeout(timeout);
-          registerPreviewSession(dir);
-          resolve({ url });
-        }
-        return;
-      }
       const url = extractDevServerUrl(combined);
       if (!url || settled) return;
       const stillRunning =
@@ -218,7 +287,7 @@ export async function startPlayer(dir: string): Promise<{ url: string }> {
       settled = true;
       clearTimeout(timeout);
       void fs.writeFile(lockPath, `pid=${child.pid}\nurl=${url}\n`).catch(() => {});
-      registerPreviewSession(dir);
+      registerPreviewSession(root);
       resolve({ url });
     }
 
@@ -228,36 +297,26 @@ export async function startPlayer(dir: string): Promise<{ url: string }> {
       else errBuf += text;
       if (outBuf.length > 256_000) outBuf = outBuf.slice(-128_000);
       if (errBuf.length > 256_000) errBuf = errBuf.slice(-128_000);
-      tryParseReuseOrUrl();
+      tryParseUrl();
     };
 
     child.stdout?.on("data", (c) => onChunk(c, "out"));
     child.stderr?.on("data", (c) => onChunk(c, "err"));
 
     child.on("error", (err) => {
-      runningPlayers.delete(dir);
+      runningPlayers.delete(root);
       settleErr(`Failed to start player: ${err.message}`);
     });
 
     child.on("close", (code) => {
-      runningPlayers.delete(dir);
+      runningPlayers.delete(root);
       if (settled) return;
       const combined = outBuf + errBuf;
-      if (code === 0 && combined.includes("SNUG_PLAYER_REUSE")) {
-        const url = extractDevServerUrl(combined);
-        if (url) {
-          settled = true;
-          clearTimeout(timeout);
-          registerPreviewSession(dir);
-          resolve({ url });
-          return;
-        }
-      }
       const url = extractDevServerUrl(combined);
       if (code === 0 && url) {
         settled = true;
         clearTimeout(timeout);
-        registerPreviewSession(dir);
+        registerPreviewSession(root);
         resolve({ url });
         return;
       }
@@ -273,7 +332,11 @@ export async function startPlayer(dir: string): Promise<{ url: string }> {
 }
 
 export async function stopPlayer(dir: string): Promise<void> {
-  stopPlayerSync(dir);
+  try {
+    stopPlayerSync(resolveProjectRoot(dir));
+  } catch {
+    /* invalid path on shutdown / race — nothing to stop */
+  }
 }
 
 export function stopAllPlayers(): void {
@@ -286,7 +349,8 @@ export function stopAllPlayers(): void {
 // ── Composition Listing ─────────────────────────────────────────────────
 
 export async function listCompositions(dir: string): Promise<CompositionFile[]> {
-  const compositionsDir = path.join(dir, "compositions");
+  const root = resolveProjectRoot(dir);
+  const compositionsDir = path.join(root, "compositions");
   try {
     const entries = await fs.readdir(compositionsDir, { withFileTypes: true });
     return entries
@@ -307,8 +371,9 @@ export async function renderComposition(
   compositionId: string,
   onProgress: (progress: RenderProgress) => void
 ): Promise<void> {
+  const root = resolveProjectRoot(dir);
   // Determine next output number
-  const outputDir = path.join(dir, "output");
+  const outputDir = path.join(root, "output");
   await fs.mkdir(outputDir, { recursive: true });
 
   let nextNum = 1;
@@ -332,7 +397,7 @@ export async function renderComposition(
 
   onProgress({ status: "rendering", progress: 0 });
 
-  const child = spawn("bash", [RENDER_SCRIPT, dir, compositionId, outputPath], {
+  const child = spawn("bash", [resolvedRenderScript, root, compositionId, outputPath], {
     env: buildEnv(),
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -397,7 +462,8 @@ export async function renderComposition(
 // ── Output History ──────────────────────────────────────────────────────
 
 export async function listOutputs(dir: string): Promise<RenderHistoryItem[]> {
-  const outputDir = path.join(dir, "output");
+  const root = resolveProjectRoot(dir);
+  const outputDir = path.join(root, "output");
   try {
     const entries = await fs.readdir(outputDir, { withFileTypes: true });
     const items: RenderHistoryItem[] = [];
@@ -423,7 +489,8 @@ export async function listOutputs(dir: string): Promise<RenderHistoryItem[]> {
 // ── System Prompt ───────────────────────────────────────────────────────
 
 export async function readSystemPrompt(dir: string): Promise<string> {
-  const promptPath = path.join(dir, "system-prompt", "prompt.md");
+  const root = resolveProjectRoot(dir);
+  const promptPath = path.join(root, "system-prompt", "prompt.md");
   try {
     return await fs.readFile(promptPath, "utf-8");
   } catch {

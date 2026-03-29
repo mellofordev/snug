@@ -65,20 +65,30 @@ export function VideoPreview({
   onBack
 }: VideoPreviewProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const effectiveCompositionIdRef = useRef(selectedComposition);
   const isRendering = renderProgress?.status === "rendering";
 
   const effectiveCompositionId = compositions.some((c) => c.id === selectedComposition)
     ? selectedComposition
     : compositions[0]?.id ?? "";
 
+  effectiveCompositionIdRef.current = effectiveCompositionId;
+
+  const postSelectCompositionToIframe = () => {
+    const id = effectiveCompositionIdRef.current;
+    const win = iframeRef.current?.contentWindow;
+    if (!id || !win) return;
+    win.postMessage({ type: "selectComposition", id }, "*");
+  };
+
   // Send composition selection to iframe (use effective id if parent state is stale)
   useEffect(() => {
-    if (!effectiveCompositionId || !iframeRef.current?.contentWindow) return;
-    iframeRef.current.contentWindow.postMessage(
-      { type: "selectComposition", id: effectiveCompositionId },
-      "*"
-    );
+    postSelectCompositionToIframe();
   }, [effectiveCompositionId]);
+
+  const handleIframeLoad = () => {
+    postSelectCompositionToIframe();
+  };
 
   const selected = compositions.find((c) => c.id === effectiveCompositionId);
   const duration = selected
@@ -224,6 +234,7 @@ export function VideoPreview({
           src={playerUrl}
           className="h-full w-full border-0"
           sandbox="allow-scripts allow-same-origin"
+          onLoad={handleIframeLoad}
         />
       </div>
     </div>

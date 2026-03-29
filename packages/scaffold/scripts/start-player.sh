@@ -32,5 +32,6 @@ if [[ -f "$LOCK_FILE" ]]; then
   rm -f "$LOCK_FILE"
 fi
 
-cd "$PROJECT_DIR"
+# Use a normalized absolute path so Bun always reads this project’s package.json (not Electron’s cwd).
+cd "$(cd "$PROJECT_DIR" && pwd)" || exit 1
 exec bun run player

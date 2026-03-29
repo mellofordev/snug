@@ -117,6 +117,7 @@ export const PlayerApp: React.FC = () => {
   return (
     <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column" }}>
       <Player
+        key={active.id}
         component={active.component}
         durationInFrames={active.durationInFrames}
         fps={active.fps}
