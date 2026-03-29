@@ -23,7 +23,8 @@ const iconPath = path.join(__dirname, "../assets/icon.png");
 
 function rendererIndexPath(): string {
   if (app.isPackaged) {
-    return path.join(__dirname, "..", "renderer", "dist", "index.html");
+    // Vite output is copied into apps/desktop/bundled-renderer before electron-pack (see sync-renderer-for-pack).
+    return path.join(__dirname, "..", "bundled-renderer", "index.html");
   }
   return path.join(__dirname, "..", "..", "renderer", "dist", "index.html");
 }

@@ -10,9 +10,8 @@ export const TEMPLATE_DIR = path.join(SCAFFOLD_PACKAGE_ROOT, "template");
 export const INIT_SCRIPT = path.join(SCAFFOLD_PACKAGE_ROOT, "scripts", "init-project.sh");
 
 /**
- * Bash script that starts the Remotion Vite player for a project.
- * Uses a lock file (.snug-player.lock) so re-running it reuses an existing server.
- * Prints the player URL to stdout on success.
+ * Optional CLI helper: same lock + `bun run player` flow as Snug’s main process (see desktop
+ * `projectManager.startPlayer`). Kept for manual debugging; the app spawns Bun with `cwd` in TS.
  */
 export const PLAYER_SCRIPT = path.join(SCAFFOLD_PACKAGE_ROOT, "scripts", "start-player.sh");
 
