@@ -21,6 +21,13 @@ import { SettingsStore } from "./settingsStore";
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
 const iconPath = path.join(__dirname, "../assets/icon.png");
 
+function rendererIndexPath(): string {
+  if (app.isPackaged) {
+    return path.join(__dirname, "..", "renderer", "dist", "index.html");
+  }
+  return path.join(__dirname, "..", "..", "renderer", "dist", "index.html");
+}
+
 let mainWindow: BrowserWindow | null = null;
 let settingsStore: SettingsStore;
 
@@ -57,7 +64,7 @@ function createWindow(): BrowserWindow {
     return window;
   }
 
-  void window.loadFile(path.join(__dirname, "../../renderer/dist/index.html"));
+  void window.loadFile(rendererIndexPath());
   return window;
 }
 
