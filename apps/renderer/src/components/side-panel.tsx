@@ -50,6 +50,7 @@ interface SidePanelProps {
   sidebarNewProjectOpen: boolean;
   newProjectName: string;
   creatingProject: boolean;
+  createStage: "scaffold" | "install" | "player" | null;
   onSelectProject: (path: string) => void;
   onNewProject: () => void;
   onCreateProject: () => void;
@@ -68,6 +69,7 @@ export function SidePanel({
   sidebarNewProjectOpen,
   newProjectName,
   creatingProject,
+  createStage,
   onSelectProject,
   onNewProject,
   onCreateProject,
@@ -139,6 +141,7 @@ export function SidePanel({
             baseDirectory={baseDirectory}
             projectName={newProjectName}
             creating={creatingProject}
+            createStage={createStage}
             isRunning={isRunning}
             onOpen={onNewProject}
             onClose={onCloseSidebarNewProject}
@@ -162,11 +165,18 @@ export function SidePanel({
   );
 }
 
+const STAGE_LABEL: Record<"scaffold" | "install" | "player", string> = {
+  scaffold: "Copying template…",
+  install:  "Installing packages…",
+  player:   "Starting preview…",
+};
+
 interface NewProjectDialogProps {
   open: boolean;
   baseDirectory: string | null;
   projectName: string;
   creating: boolean;
+  createStage: "scaffold" | "install" | "player" | null;
   isRunning: boolean;
   onOpen: () => void;
   onClose: () => void;
@@ -180,6 +190,7 @@ function NewProjectDialog({
   baseDirectory,
   projectName,
   creating,
+  createStage,
   isRunning,
   onOpen,
   onClose,
@@ -216,17 +227,26 @@ function NewProjectDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {baseDirectory && (
+        {baseDirectory ? (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>Location:</span>
-            <span className="truncate font-mono">{baseDirectory}</span>
+            <span className="shrink-0">Location:</span>
+            <span className="min-w-0 truncate font-mono">{baseDirectory}</span>
             <Button
               variant="link"
               size="xs"
-              className="h-auto p-0"
+              className="h-auto shrink-0 p-0"
               onClick={onChangeBase}
             >
               change
+            </Button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2 rounded-lg border border-dashed border-border p-3">
+            <p className="text-xs text-muted-foreground">
+              Choose a folder where new projects will be created.
+            </p>
+            <Button variant="outline" size="sm" onClick={onChangeBase}>
+              Pick location…
             </Button>
           </div>
         )}
@@ -235,7 +255,7 @@ function NewProjectDialog({
           value={projectName}
           onChange={(e) => onSetName(e.target.value)}
           placeholder="my-video-project"
-          onKeyDown={(e) => { if (e.key === "Enter") onCreate(); }}
+          onKeyDown={(e) => { if (e.key === "Enter" && baseDirectory) onCreate(); }}
           autoFocus
         />
 
@@ -245,14 +265,22 @@ function NewProjectDialog({
           </p>
         )}
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button
-            disabled={!projectName.trim() || creating}
-            onClick={onCreate}
-          >
-            {creating ? "Creating…" : "Create project"}
-          </Button>
+        <DialogFooter className="flex-col items-stretch gap-2 sm:flex-col">
+          {createStage && (
+            <p className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="inline-block size-2 animate-pulse rounded-full bg-blue-500" />
+              {STAGE_LABEL[createStage]}
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={onClose} disabled={creating}>Cancel</Button>
+            <Button
+              disabled={!projectName.trim() || !baseDirectory || creating}
+              onClick={onCreate}
+            >
+              {creating ? STAGE_LABEL[createStage ?? "scaffold"] : "Create project"}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

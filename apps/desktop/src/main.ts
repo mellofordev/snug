@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeImage } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from "electron";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -6,10 +6,27 @@ import { promptInputSchema } from "@acme/contracts";
 
 import { IPC_CHANNELS } from "./ipcChannels";
 import { detectAgents, runPrompt, stopPrompt } from "./agentManager";
+import {
+  initProject,
+  startPlayer,
+  stopPlayer,
+  stopAllPlayers,
+  renderComposition,
+  listCompositions,
+  listOutputs,
+  readSystemPrompt
+} from "./projectManager";
 import { SettingsStore } from "./settingsStore";
 
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
 const iconPath = path.join(__dirname, "../assets/icon.png");
+
+function rendererIndexPath(): string {
+  if (app.isPackaged) {
+    return path.join(__dirname, "..", "renderer", "dist", "index.html");
+  }
+  return path.join(__dirname, "..", "..", "renderer", "dist", "index.html");
+}
 
 let mainWindow: BrowserWindow | null = null;
 let settingsStore: SettingsStore;
@@ -31,7 +48,8 @@ function createWindow(): BrowserWindow {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      webviewTag: true
     }
   });
 
@@ -46,7 +64,7 @@ function createWindow(): BrowserWindow {
     return window;
   }
 
-  void window.loadFile(path.join(__dirname, "../../renderer/dist/index.html"));
+  void window.loadFile(rendererIndexPath());
   return window;
 }
 
@@ -105,6 +123,57 @@ function registerIpcHandlers(): void {
     await fs.mkdir(fullPath, { recursive: true });
     return fullPath;
   });
+
+  ipcMain.handle(IPC_CHANNELS.shellOpenPath, async (_event, filePath: unknown) => {
+    if (typeof filePath !== "string" || !filePath) {
+      throw new Error("Invalid file path");
+    }
+    const err = await shell.openPath(filePath);
+    if (err) {
+      throw new Error(err);
+    }
+  });
+
+  // ── Project handlers ──────────────────────────────────────────────
+
+  ipcMain.handle(IPC_CHANNELS.projectInit, async (_event, dir: unknown) => {
+    if (typeof dir !== "string") throw new Error("Invalid directory");
+    return initProject(dir);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.projectStartPlayer, async (_event, dir: unknown) => {
+    if (typeof dir !== "string") throw new Error("Invalid directory");
+    return startPlayer(dir);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.projectStopPlayer, async (_event, dir: unknown) => {
+    if (typeof dir !== "string") throw new Error("Invalid directory");
+    return stopPlayer(dir);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.projectRender, async (_event, dir: unknown, compositionId: unknown) => {
+    if (typeof dir !== "string" || typeof compositionId !== "string") {
+      throw new Error("Invalid arguments");
+    }
+    renderComposition(dir, compositionId, (progress) => {
+      mainWindow?.webContents.send(IPC_CHANNELS.projectRenderProgress, progress);
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.projectListOutputs, async (_event, dir: unknown) => {
+    if (typeof dir !== "string") throw new Error("Invalid directory");
+    return listOutputs(dir);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.projectListCompositions, async (_event, dir: unknown) => {
+    if (typeof dir !== "string") throw new Error("Invalid directory");
+    return listCompositions(dir);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.projectReadSystemPrompt, async (_event, dir: unknown) => {
+    if (typeof dir !== "string") throw new Error("Invalid directory");
+    return readSystemPrompt(dir);
+  });
 }
 
 async function bootstrap(): Promise<void> {
@@ -130,7 +199,12 @@ app.whenReady().then(() => {
   void bootstrap();
 });
 
+app.on("before-quit", () => {
+  stopAllPlayers();
+});
+
 app.on("window-all-closed", () => {
+  stopAllPlayers();
   if (process.platform !== "darwin") {
     app.quit();
   }

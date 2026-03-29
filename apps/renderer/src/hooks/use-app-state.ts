@@ -1,8 +1,32 @@
 import { useCallback, useEffect, useState } from "react";
 
-import type { Agent, AgentId, NativeApi, PromptOutput } from "@acme/contracts";
+import type {
+  Agent,
+  AgentId,
+  NativeApi,
+  PromptOutput,
+  RenderHistoryItem,
+  RenderProgress
+} from "@acme/contracts";
 
 const RECENT_PROJECTS_KEY = "snug:recent-projects";
+
+interface CompositionItem {
+  id: string;
+  meta: {
+    fps: number;
+    durationInFrames: number;
+    width: number;
+    height: number;
+  };
+}
+
+const DEFAULT_COMPOSITION_META: CompositionItem["meta"] = {
+  fps: 30,
+  durationInFrames: 150,
+  width: 1920,
+  height: 1080
+};
 
 export interface AppState {
   api: NativeApi | undefined;
@@ -26,7 +50,8 @@ export interface AppState {
   newProjectName: string;
   setNewProjectName: (name: string) => void;
   creatingProject: boolean;
-  onNewProject: () => Promise<void>;
+  createStage: "scaffold" | "install" | "player" | null;
+  onNewProject: () => void;
   onCreateProject: () => Promise<void>;
   onChangeBaseDirectory: () => Promise<void>;
 
@@ -35,6 +60,25 @@ export interface AppState {
   error: string | null;
   onSubmit: () => Promise<void>;
   onStop: () => Promise<void>;
+
+  // Video preview state
+  view: "output" | "preview";
+  playerUrl: string;
+  playerRunning: boolean;
+  playerStarting: boolean;
+  compositions: CompositionItem[];
+  selectedComposition: string;
+  renderProgress: RenderProgress | null;
+  renderHistory: RenderHistoryItem[];
+  switchToOutput: () => void;
+  switchToPreview: () => void;
+  onPreview: () => Promise<void>;
+  selectComposition: (id: string) => void;
+  refreshCompositions: () => Promise<void>;
+  refreshRenderHistory: () => Promise<void>;
+  openOutputVideo: (filePath: string) => Promise<void>;
+  triggerRender: (compositionId?: string) => Promise<void>;
+  startPlayer: () => Promise<void>;
 }
 
 export function useAppState(api: NativeApi | undefined): AppState {
@@ -50,6 +94,17 @@ export function useAppState(api: NativeApi | undefined): AppState {
   const [sidebarNewProjectOpen, setSidebarNewProjectOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [creatingProject, setCreatingProject] = useState(false);
+  const [createStage, setCreateStage] = useState<"scaffold" | "install" | "player" | null>(null);
+
+  // Video preview state
+  const [view, setView] = useState<"output" | "preview">("output");
+  const [playerUrl, setPlayerUrl] = useState("");
+  const [playerRunning, setPlayerRunning] = useState(false);
+  const [playerStarting, setPlayerStarting] = useState(false);
+  const [compositions, setCompositions] = useState<CompositionItem[]>([]);
+  const [selectedComposition, setSelectedComposition] = useState("");
+  const [renderProgress, setRenderProgress] = useState<RenderProgress | null>(null);
+  const [renderHistory, setRenderHistory] = useState<RenderHistoryItem[]>([]);
 
   const detectAgents = useCallback(async () => {
     if (!api) return;
@@ -73,13 +128,16 @@ export function useAppState(api: NativeApi | undefined): AppState {
     }
   }, []);
 
-  // Persist recent projects when working directory changes
+  // Persist project list when working directory changes. Order stays fixed: selecting a project
+  // does not move it; only newly opened or created projects are appended (cap 12, drop oldest).
   useEffect(() => {
     if (!workingDirectory) return;
     try {
       const raw = localStorage.getItem(RECENT_PROJECTS_KEY);
       const prev: string[] = raw ? (JSON.parse(raw) as string[]) : [];
-      const next = [workingDirectory, ...prev.filter((p) => p !== workingDirectory)].slice(0, 12);
+      const next = prev.includes(workingDirectory)
+        ? prev
+        : [...prev, workingDirectory].slice(-12);
       localStorage.setItem(RECENT_PROJECTS_KEY, JSON.stringify(next));
       setRecentProjects(next);
     } catch {
@@ -110,6 +168,77 @@ export function useAppState(api: NativeApi | undefined): AppState {
     return api.prompt.onOutput((output) => setCurrentRun(output));
   }, [api]);
 
+  // Subscribe to render progress
+  useEffect(() => {
+    if (!api) return;
+    return api.project.onRenderProgress((progress) => {
+      setRenderProgress(progress);
+      // Refresh output history when render completes
+      if (progress.status === "completed" && workingDirectory) {
+        void api.project.listOutputs(workingDirectory).then(setRenderHistory);
+      }
+    });
+  }, [api, workingDirectory]);
+
+  // Merge composition metadata from the Remotion player (fps, duration, etc.)
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      const data = event.data;
+      if (!data || data.source !== "snug-player") return;
+
+      if (data.type === "compositions" && Array.isArray(data.items)) {
+        const items = data.items as CompositionItem[];
+        setCompositions((prev) => {
+          const metaMap = new Map(items.map((i) => [i.id, i.meta]));
+          if (prev.length === 0) return items;
+          return prev.map((p) => ({
+            ...p,
+            meta: metaMap.get(p.id) ?? p.meta
+          }));
+        });
+        setSelectedComposition((sel) => {
+          if (sel && items.some((i) => i.id === sel)) return sel;
+          const first = items[0];
+          if (first) return first.id;
+          return sel;
+        });
+      }
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, []);
+
+  // Tear down the previous project's Vite preview when the workspace changes, a new project is
+  // opened, or the renderer unmounts — avoids orphan dev servers consuming RAM.
+  useEffect(() => {
+    return () => {
+      if (!api || !workingDirectory) return;
+      void api.project.stopPlayer(workingDirectory);
+    };
+  }, [api, workingDirectory]);
+
+  // Reset player state when working directory changes
+  useEffect(() => {
+    setPlayerRunning(false);
+    setPlayerUrl("");
+    setCompositions([]);
+    setSelectedComposition("");
+    setView("output");
+  }, [workingDirectory]);
+
+  // Auto-switch to preview when agent completes and player is already running
+  useEffect(() => {
+    if (currentRun?.status === "completed" && currentRun.exitCode === 0 && playerRunning) {
+      setView("preview");
+    }
+  }, [currentRun?.status, currentRun?.exitCode, playerRunning]);
+
+  // Load render history when working directory changes
+  useEffect(() => {
+    if (!api || !workingDirectory) return;
+    void api.project.listOutputs(workingDirectory).then(setRenderHistory);
+  }, [api, workingDirectory]);
+
   const setAndPersistDirectory = useCallback(
     async (dir: string) => {
       setWorkingDirectory(dir);
@@ -124,17 +253,10 @@ export function useAppState(api: NativeApi | undefined): AppState {
     if (dir) await setAndPersistDirectory(dir);
   }, [api, setAndPersistDirectory]);
 
-  const onNewProject = useCallback(async () => {
-    if (!api) return;
-    if (!baseDirectory) {
-      const dir = await api.dialog.selectDirectory();
-      if (!dir) return;
-      await api.settings.setBaseDirectory(dir);
-      setBaseDirectory(dir);
-    }
+  const onNewProject = useCallback(() => {
     setSidebarNewProjectOpen(true);
     setNewProjectName("");
-  }, [api, baseDirectory]);
+  }, []);
 
   const onCreateProject = useCallback(async () => {
     if (!api || !baseDirectory || !newProjectName.trim()) return;
@@ -142,16 +264,30 @@ export function useAppState(api: NativeApi | undefined): AppState {
     const fullPath = `${baseDirectory}/${safeName}`;
 
     setCreatingProject(true);
+    setCreateStage("scaffold");
     setError(null);
     try {
       const created = await api.fs.createDirectory(fullPath);
+
+      // Run scaffold: copies template files + bun install
+      setCreateStage("install");
+      const result = await api.project.init(created);
+      if (!result.success) {
+        setError(`Project setup failed: ${result.error}`);
+        setCreatingProject(false);
+        setCreateStage(null);
+        return;
+      }
+
+      // Setting the directory triggers the auto-start effect for the player
       await setAndPersistDirectory(created);
       setSidebarNewProjectOpen(false);
       setNewProjectName("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to create directory.");
+      setError(e instanceof Error ? e.message : "Failed to create project.");
     } finally {
       setCreatingProject(false);
+      setCreateStage(null);
     }
   }, [api, baseDirectory, newProjectName, setAndPersistDirectory]);
 
@@ -163,15 +299,111 @@ export function useAppState(api: NativeApi | undefined): AppState {
     setBaseDirectory(dir);
   }, [api]);
 
+  const refreshCompositions = useCallback(async () => {
+    if (!api || !workingDirectory) return;
+    try {
+      const files = await api.project.listCompositions(workingDirectory);
+      setCompositions((prev) => {
+        const metaById = new Map(prev.map((c) => [c.id, c.meta]));
+        return files.map((f) => ({
+          id: f.name,
+          meta: metaById.get(f.name) ?? DEFAULT_COMPOSITION_META
+        }));
+      });
+      setSelectedComposition((sel) => {
+        if (sel && files.some((f) => f.name === sel)) return sel;
+        return files[0]?.name ?? "";
+      });
+    } catch {
+      /* non-fatal */
+    }
+  }, [api, workingDirectory]);
+
+  const refreshRenderHistory = useCallback(async () => {
+    if (!api || !workingDirectory) return;
+    try {
+      const items = await api.project.listOutputs(workingDirectory);
+      setRenderHistory(items);
+    } catch {
+      /* non-fatal */
+    }
+  }, [api, workingDirectory]);
+
+  const openOutputVideo = useCallback(async (filePath: string) => {
+    if (!api) return;
+    setError(null);
+    try {
+      await api.shell.openPath(filePath);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not open video.");
+    }
+  }, [api]);
+
+  // Refresh composition file list from disk whenever preview is shown
+  useEffect(() => {
+    if (view !== "preview" || !api || !workingDirectory) return;
+    void refreshCompositions();
+  }, [view, api, workingDirectory, refreshCompositions]);
+
+  const startPlayer = useCallback(async () => {
+    if (!api || !workingDirectory) return;
+    setError(null);
+    setPlayerStarting(true);
+    try {
+      const { url } = await api.project.startPlayer(workingDirectory);
+      setPlayerUrl(url);
+      setPlayerRunning(true);
+      void refreshCompositions();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to start player.");
+    } finally {
+      setPlayerStarting(false);
+    }
+  }, [api, workingDirectory, refreshCompositions]);
+
+  const onPreview = useCallback(async () => {
+    if (!api || !workingDirectory) return;
+    if (playerRunning) {
+      setView("preview");
+      void refreshCompositions();
+      return;
+    }
+    setPlayerStarting(true);
+    setError(null);
+    try {
+      const { url } = await api.project.startPlayer(workingDirectory);
+      setPlayerUrl(url);
+      setPlayerRunning(true);
+      setView("preview");
+      void refreshCompositions();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to start preview.");
+    } finally {
+      setPlayerStarting(false);
+    }
+  }, [api, workingDirectory, playerRunning, refreshCompositions]);
+
   const onSubmit = useCallback(async () => {
     if (!api || !selectedAgent || !prompt.trim() || !workingDirectory) return;
     setError(null);
     setCurrentRun(null);
+    setView("output");
+
+    // Read system prompt from project
+    let systemPrompt: string | undefined;
+    try {
+      const sp = await api.project.readSystemPrompt(workingDirectory);
+      if (sp) systemPrompt = sp;
+    } catch {
+      // No system prompt is fine
+    }
+
     try {
       const output = await api.prompt.run({
         agentId: selectedAgent as AgentId,
         prompt: prompt.trim(),
-        workingDirectory
+        workingDirectory,
+        systemPrompt
       });
       setCurrentRun(output);
     } catch (e) {
@@ -183,6 +415,24 @@ export function useAppState(api: NativeApi | undefined): AppState {
     if (!api || !currentRun) return;
     await api.prompt.stop(currentRun.id);
   }, [api, currentRun]);
+
+  const triggerRender = useCallback(
+    async (compositionId?: string) => {
+      const id = compositionId ?? selectedComposition;
+      if (!api || !workingDirectory || !id) return;
+      setRenderProgress({ status: "rendering", progress: 0 });
+      try {
+        await api.project.render(workingDirectory, id);
+      } catch (e) {
+        setRenderProgress({
+          status: "failed",
+          progress: 0,
+          error: e instanceof Error ? e.message : "Render failed"
+        });
+      }
+    },
+    [api, workingDirectory, selectedComposition]
+  );
 
   const isRunning = currentRun?.status === "running";
 
@@ -204,6 +454,7 @@ export function useAppState(api: NativeApi | undefined): AppState {
     newProjectName,
     setNewProjectName,
     creatingProject,
+    createStage,
     onNewProject,
     onCreateProject,
     onChangeBaseDirectory,
@@ -211,6 +462,24 @@ export function useAppState(api: NativeApi | undefined): AppState {
     isRunning,
     error,
     onSubmit,
-    onStop
+    onStop,
+    // Video preview
+    view,
+    playerUrl,
+    playerRunning,
+    playerStarting,
+    compositions,
+    selectedComposition,
+    renderProgress,
+    renderHistory,
+    switchToOutput: () => setView("output"),
+    switchToPreview: () => setView("preview"),
+    onPreview,
+    selectComposition: setSelectedComposition,
+    refreshCompositions,
+    refreshRenderHistory,
+    openOutputVideo,
+    triggerRender,
+    startPlayer
   };
 }

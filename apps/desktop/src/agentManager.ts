@@ -86,7 +86,7 @@ export function runPrompt(
 
   // Use cached full path if available, otherwise fall back to command name
   const binary = resolvedPaths.get(input.agentId) ?? AGENT_COMMANDS[input.agentId].command;
-  const args = buildArgs(input.agentId);
+  const args = buildArgs(input.agentId, input.systemPrompt);
 
   const child = spawn(binary, args, {
     cwd: input.workingDirectory,
@@ -130,10 +130,15 @@ export function runPrompt(
   return output;
 }
 
-function buildArgs(agentId: AgentId): string[] {
+function buildArgs(agentId: AgentId, systemPrompt?: string): string[] {
   switch (agentId) {
-    case "claude-code":
-      return ["-p", "--dangerously-skip-permissions"];
+    case "claude-code": {
+      const args = ["-p", "--dangerously-skip-permissions"];
+      if (systemPrompt) {
+        args.push("--system-prompt", systemPrompt);
+      }
+      return args;
+    }
   }
 }
 

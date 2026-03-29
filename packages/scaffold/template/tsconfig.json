@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "types": ["vite/client", "webpack-env"],
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "outDir": "dist",
+    "rootDir": ".",
+    "baseUrl": ".",
+    "paths": {
+      "@compositions/*": ["./compositions/*"]
+    }
+  },
+  "include": ["src", "compositions"]
+}

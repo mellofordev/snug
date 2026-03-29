@@ -32,6 +32,27 @@ const nativeApi: NativeApi = {
   },
   fs: {
     createDirectory: (fullPath) => ipcRenderer.invoke(IPC_CHANNELS.fsCreateDirectory, fullPath)
+  },
+  shell: {
+    openPath: (filePath) => ipcRenderer.invoke(IPC_CHANNELS.shellOpenPath, filePath)
+  },
+  project: {
+    init: (dir) => ipcRenderer.invoke(IPC_CHANNELS.projectInit, dir),
+    startPlayer: (dir) => ipcRenderer.invoke(IPC_CHANNELS.projectStartPlayer, dir),
+    stopPlayer: (dir) => ipcRenderer.invoke(IPC_CHANNELS.projectStopPlayer, dir),
+    render: (dir, compositionId) => ipcRenderer.invoke(IPC_CHANNELS.projectRender, dir, compositionId),
+    onRenderProgress: (callback) => {
+      const handler = (_event: Electron.IpcRendererEvent, progress: unknown) => {
+        callback(progress as Parameters<typeof callback>[0]);
+      };
+      ipcRenderer.on(IPC_CHANNELS.projectRenderProgress, handler);
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.projectRenderProgress, handler);
+      };
+    },
+    listOutputs: (dir) => ipcRenderer.invoke(IPC_CHANNELS.projectListOutputs, dir),
+    listCompositions: (dir) => ipcRenderer.invoke(IPC_CHANNELS.projectListCompositions, dir),
+    readSystemPrompt: (dir) => ipcRenderer.invoke(IPC_CHANNELS.projectReadSystemPrompt, dir)
   }
 };
 

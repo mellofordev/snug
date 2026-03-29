@@ -8,5 +8,14 @@ export const IPC_CHANNELS = {
   settingsSetBaseDir: "settings:set-base-dir",
   settingsGetLastDir: "settings:get-last-dir",
   settingsSetLastDir: "settings:set-last-dir",
-  fsCreateDirectory: "fs:create-directory"
+  fsCreateDirectory: "fs:create-directory",
+  shellOpenPath: "shell:open-path",
+  projectInit: "project:init",
+  projectStartPlayer: "project:start-player",
+  projectStopPlayer: "project:stop-player",
+  projectRender: "project:render",
+  projectRenderProgress: "project:render-progress",
+  projectListOutputs: "project:list-outputs",
+  projectListCompositions: "project:list-compositions",
+  projectReadSystemPrompt: "project:read-system-prompt"
 } as const;

@@ -1,4 +1,11 @@
-import type { Agent, PromptInput, PromptOutput } from "./agent";
+import type {
+  Agent,
+  CompositionFile,
+  PromptInput,
+  PromptOutput,
+  RenderHistoryItem,
+  RenderProgress
+} from "./agent";
 
 export const IPC_CHANNELS = {
   agentsDetect: "agents:detect",
@@ -10,7 +17,16 @@ export const IPC_CHANNELS = {
   settingsSetBaseDir: "settings:set-base-dir",
   settingsGetLastDir: "settings:get-last-dir",
   settingsSetLastDir: "settings:set-last-dir",
-  fsCreateDirectory: "fs:create-directory"
+  fsCreateDirectory: "fs:create-directory",
+  shellOpenPath: "shell:open-path",
+  projectInit: "project:init",
+  projectStartPlayer: "project:start-player",
+  projectStopPlayer: "project:stop-player",
+  projectRender: "project:render",
+  projectRenderProgress: "project:render-progress",
+  projectListOutputs: "project:list-outputs",
+  projectListCompositions: "project:list-compositions",
+  projectReadSystemPrompt: "project:read-system-prompt"
 } as const;
 
 export interface NativeApi {
@@ -33,5 +49,19 @@ export interface NativeApi {
   };
   fs: {
     createDirectory: (fullPath: string) => Promise<string>;
+  };
+  shell: {
+    /** Opens a file with the OS default app (e.g. QuickTime for video on macOS). */
+    openPath: (filePath: string) => Promise<void>;
+  };
+  project: {
+    init: (dir: string) => Promise<{ success: boolean; error?: string }>;
+    startPlayer: (dir: string) => Promise<{ url: string }>;
+    stopPlayer: (dir: string) => Promise<void>;
+    render: (dir: string, compositionId: string) => Promise<void>;
+    onRenderProgress: (callback: (progress: RenderProgress) => void) => () => void;
+    listOutputs: (dir: string) => Promise<RenderHistoryItem[]>;
+    listCompositions: (dir: string) => Promise<CompositionFile[]>;
+    readSystemPrompt: (dir: string) => Promise<string>;
   };
 }

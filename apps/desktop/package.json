@@ -2,26 +2,59 @@
   "name": "@acme/desktop",
   "version": "0.0.0",
   "private": true,
+  "description": "Snug — Electron shell for Remotion + agent workflows",
+  "author": "Snug",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "concurrently -k -n BUNDLE,ELECTRON \"bun run dev:bundle\" \"bun run dev:electron\"",
-    "dev:bundle": "tsup src/main.ts src/preload.ts --format cjs --out-dir dist-electron --sourcemap --watch --clean",
+    "dev:bundle": "tsup src/main.ts src/preload.ts --format cjs --out-dir dist-electron --sourcemap --watch --clean --external @acme/scaffold --external electron",
     "dev:electron": "bun run scripts/dev-electron.mjs",
-    "build": "tsup src/main.ts src/preload.ts --format cjs --out-dir dist-electron --sourcemap --clean",
+    "build": "tsup src/main.ts src/preload.ts --format cjs --out-dir dist-electron --sourcemap --clean --external @acme/scaffold --external electron",
     "start": "electron dist-electron/main.js",
+    "pack:mac": "bunx electron-builder --mac dmg",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
     "@acme/contracts": "workspace:*",
-    "electron": "^33.3.0"
+    "@acme/scaffold": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
     "concurrently": "^9.1.2",
+    "electron": "^33.3.0",
+    "electron-builder": "^25.1.8",
     "electronmon": "^2.0.2",
     "tsup": "^8.3.5",
     "typescript": "^5.7.3",
     "wait-on": "^8.0.2"
+  },
+  "build": {
+    "appId": "com.snug.desktop",
+    "productName": "Snug",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist-electron/**/*",
+      "package.json",
+      {
+        "from": "../renderer/dist",
+        "to": "renderer/dist",
+        "filter": ["**/*"]
+      }
+    ],
+    "extraMetadata": {
+      "main": "dist-electron/main.js"
+    },
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": ["dmg"],
+      "icon": "assets/icon.png"
+    },
+    "dmg": {
+      "title": "${productName} ${version}"
+    }
   }
 }
