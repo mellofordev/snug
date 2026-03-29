@@ -1,5 +1,10 @@
 import type { Agent, AgentId } from "@acme/contracts";
-import { ArrowDown01Icon, PlayIcon, Rocket01FreeIcons, StopIcon } from "@hugeicons/core-free-icons";
+import {
+  ArrowDown01Icon,
+  PlayIcon,
+  Rocket01FreeIcons,
+  StopIcon
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 
 import { Button } from "@/components/ui/button";
@@ -12,7 +17,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
-import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 
 interface ComposerProps {
@@ -21,10 +25,13 @@ interface ComposerProps {
   agents: Agent[];
   selectedAgent: AgentId | "";
   isRunning: boolean;
+  playerRunning: boolean;
+  playerStarting: boolean;
   onSetPrompt: (value: string) => void;
   onSelectAgent: (id: AgentId) => void;
   onSubmit: () => void;
   onStop: () => void;
+  onPreview: () => Promise<void>;
 }
 
 export function Composer({
@@ -33,15 +40,19 @@ export function Composer({
   agents,
   selectedAgent,
   isRunning,
+  playerRunning,
+  playerStarting,
   onSetPrompt,
   onSelectAgent,
   onSubmit,
-  onStop
+  onStop,
+  onPreview
 }: ComposerProps) {
   const availableAgents = agents.filter((a) => a.available);
   const unavailableAgents = agents.filter((a) => !a.available);
   const canSubmit = !!selectedAgent && !!prompt.trim() && !!workingDirectory;
   const selectedAgentName = agents.find((a) => a.id === selectedAgent)?.name;
+  const showPreview = !!workingDirectory && !isRunning;
 
   return (
     <div className="shrink-0 px-5 pb-3">
@@ -94,6 +105,38 @@ export function Composer({
               )}
             </DropdownMenuContent>
           </DropdownMenu>
+
+          {showPreview && (
+            <div className="flex min-w-0 items-center gap-2 pl-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1.5 px-2.5 text-xs"
+                disabled={playerStarting}
+                title={
+                  playerRunning && !playerStarting
+                    ? "Player running — open preview"
+                    : undefined
+                }
+                onClick={() => void onPreview()}
+              >
+                {playerRunning && !playerStarting ? (
+                  <span
+                    className="player-ready-dot size-2.5 shrink-0 rounded-full bg-emerald-500"
+                    aria-hidden
+                  />
+                ) : (
+                  <HugeiconsIcon icon={PlayIcon} size={14} />
+                )}
+                {playerStarting ? "Starting…" : "Preview"}
+              </Button>
+              {playerStarting && (
+                <span className="hidden truncate text-[10px] text-muted-foreground sm:inline">
+                  Starting Remotion player…
+                </span>
+              )}
+            </div>
+          )}
 
           <div className="ml-auto">
             {isRunning ? (

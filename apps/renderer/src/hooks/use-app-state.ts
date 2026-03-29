@@ -42,7 +42,6 @@ export interface AppState {
   workingDirectory: string;
   recentProjects: string[];
   setAndPersistDirectory: (dir: string) => Promise<void>;
-  onSelectDirectory: () => Promise<void>;
 
   baseDirectory: string | null;
   sidebarNewProjectOpen: boolean;
@@ -247,12 +246,6 @@ export function useAppState(api: NativeApi | undefined): AppState {
     [api]
   );
 
-  const onSelectDirectory = useCallback(async () => {
-    if (!api) return;
-    const dir = await api.dialog.selectDirectory();
-    if (dir) await setAndPersistDirectory(dir);
-  }, [api, setAndPersistDirectory]);
-
   const onNewProject = useCallback(() => {
     setSidebarNewProjectOpen(true);
     setNewProjectName("");
@@ -447,7 +440,6 @@ export function useAppState(api: NativeApi | undefined): AppState {
     workingDirectory,
     recentProjects,
     setAndPersistDirectory,
-    onSelectDirectory,
     baseDirectory,
     sidebarNewProjectOpen,
     setSidebarNewProjectOpen,

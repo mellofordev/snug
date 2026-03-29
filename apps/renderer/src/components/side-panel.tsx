@@ -1,5 +1,5 @@
 import type { PromptOutput, User } from "@acme/contracts";
-import { Add01Icon, FolderOpenIcon } from "@hugeicons/core-free-icons";
+import { Add01Icon, UserIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 
 import { Badge } from "@/components/ui/badge";
@@ -16,9 +16,18 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
+import { useTheme, type ThemePreference } from "@/components/theme-provider";
 import { Input } from "@/components/ui/input";
 import {
   Sidebar,
@@ -62,7 +71,6 @@ interface SidePanelProps {
   onNewProject: () => void;
   onCreateProject: () => void;
   onChangeBaseDirectory: () => void;
-  onSelectDirectory: () => void;
   onSetNewProjectName: (name: string) => void;
   onCloseSidebarNewProject: () => void;
   onLogout: () => void;
@@ -83,46 +91,72 @@ export function SidePanel({
   onNewProject,
   onCreateProject,
   onChangeBaseDirectory,
-  onSelectDirectory,
   onSetNewProjectName,
   onCloseSidebarNewProject,
   onLogout
 }: SidePanelProps) {
+  const { theme, setTheme } = useTheme();
+
   return (
     <SidebarProvider className="min-h-0 w-auto flex-none">
       <Sidebar collapsible="none">
         {/* Draggable header — traffic lights sit here on macOS */}
         <SidebarHeader
-          className="h-[38px] flex-row items-center gap-2 pl-[78px] pr-3"
+          className="box-border h-[38px] min-h-[38px] max-h-[38px] flex-row flex-nowrap items-center justify-between gap-2 p-0 pl-[78px] pr-2"
           style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
         >
-          <span className="text-sm font-semibold tracking-tight">snug</span>
-          <Badge variant="secondary" className="text-[10px]">beta</Badge>
+          <div className="flex h-full min-w-0 items-center gap-2">
+            <span className="text-sm font-semibold leading-tight tracking-tight">
+              snug
+            </span>
+            <Badge
+              variant="secondary"
+              className="h-5 shrink-0 px-1.5 py-0 text-[10px] font-medium leading-none"
+            >
+              beta
+            </Badge>
+          </div>
 
-          <div className="ml-auto" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
+          <div
+            className="flex h-full shrink-0 items-center self-stretch"
+            style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+          >
             <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="size-6 overflow-hidden rounded-full ring-1 ring-border transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                  {user.picture ? (
-                    <img
-                      src={user.picture}
-                      alt={user.name}
-                      className="size-full object-cover"
-                      referrerPolicy="no-referrer"
-                    />
-                  ) : (
-                    <span className="flex size-full items-center justify-center bg-muted text-[10px] font-medium text-muted-foreground">
-                      {user.name.charAt(0).toUpperCase()}
-                    </span>
-                  )}
-                </button>
+              <DropdownMenuTrigger
+                className="box-border inline-flex border rounded-full h-5 w-5 min-h-5 min-w-5 max-h-5 max-w-5 shrink-0 items-center justify-center  p-0 text-muted-foreground shadow-none transition-colors hover:bg-muted/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label="Account menu"
+              >
+                <HugeiconsIcon icon={UserIcon} size={14} strokeWidth={2} className="shrink-0" />
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuContent align="end" className="w-52">
                 <div className="px-2 py-1.5">
                   <p className="truncate text-sm font-medium">{user.name}</p>
                   <p className="truncate text-xs text-muted-foreground">{user.email}</p>
                 </div>
-                <DropdownMenuItem>Settings</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>Settings</DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="min-w-44">
+                    <DropdownMenuGroup>
+                      <DropdownMenuLabel className="text-xs text-muted-foreground">
+                        Theme
+                      </DropdownMenuLabel>
+                      <DropdownMenuRadioGroup
+                        value={theme}
+                        onValueChange={(value) => {
+                          if (value === "light" || value === "dark" || value === "system") {
+                            setTheme(value as ThemePreference);
+                          }
+                        }}
+                      >
+                        <DropdownMenuRadioItem value="light">Light</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="dark">Dark</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="system">System</DropdownMenuRadioItem>
+                      </DropdownMenuRadioGroup>
+                    </DropdownMenuGroup>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={onLogout}>Log out</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -135,7 +169,7 @@ export function SidePanel({
             <SidebarGroupContent>
               {recentProjects.length === 0 ? (
                 <p className="px-3 py-8 text-center text-xs text-muted-foreground">
-                  Open a folder or create a new project to get started.
+                  Create a new project to get started.
                 </p>
               ) : (
                 <SidebarMenu>
@@ -188,16 +222,6 @@ export function SidePanel({
             onChangeBase={onChangeBaseDirectory}
             onCreate={onCreateProject}
           />
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-center"
-            disabled={isRunning}
-            onClick={onSelectDirectory}
-          >
-            <HugeiconsIcon icon={FolderOpenIcon} size={14} />
-            Open folder
-          </Button>
         </SidebarFooter>
       </Sidebar>
     </SidebarProvider>

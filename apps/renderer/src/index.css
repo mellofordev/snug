@@ -85,6 +85,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: oklch(0.141 0.005 285.823);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.21 0.006 285.885);
@@ -116,6 +117,25 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.552 0.016 285.938);
+}
+
+/* Green “live” indicator on Preview when the player is already running */
+@keyframes player-ready-dot-shimmer {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: 0 0 4px 1px rgb(74 222 128 / 18%);
+  }
+  50% {
+    opacity: 0.97;
+    transform: scale(1.04);
+    box-shadow: 0 0 6px 2px rgb(74 222 128 / 28%);
+  }
+}
+
+.player-ready-dot {
+  animation: player-ready-dot-shimmer 2.6s ease-in-out infinite;
 }
 
 @layer base {

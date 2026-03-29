@@ -67,14 +67,15 @@ export default function App() {
           onNewProject={state.onNewProject}
           onCreateProject={() => void state.onCreateProject()}
           onChangeBaseDirectory={() => void state.onChangeBaseDirectory()}
-          onSelectDirectory={() => void state.onSelectDirectory()}
           onSetNewProjectName={state.setNewProjectName}
           onCloseSidebarNewProject={() => state.setSidebarNewProjectOpen(false)}
           onLogout={() => void auth.logout()}
         />
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <TopBar workingDirectory={state.workingDirectory} />
+          {!(state.view === "preview" && state.playerUrl) && (
+            <TopBar workingDirectory={state.workingDirectory} />
+          )}
 
           {state.error && (
             <div className="shrink-0 bg-destructive/5 px-5 py-2 text-sm text-destructive">
@@ -97,14 +98,7 @@ export default function App() {
               onBack={state.switchToOutput}
             />
           ) : (
-            <OutputViewer
-              currentRun={state.currentRun}
-              isRunning={state.isRunning}
-              playerRunning={state.playerRunning}
-              playerStarting={state.playerStarting}
-              workingDirectory={state.workingDirectory}
-              onPreview={state.onPreview}
-            />
+            <OutputViewer currentRun={state.currentRun} isRunning={state.isRunning} />
           )}
 
           <Composer
@@ -113,10 +107,13 @@ export default function App() {
             agents={state.agents}
             selectedAgent={state.selectedAgent}
             isRunning={state.isRunning}
+            playerRunning={state.playerRunning}
+            playerStarting={state.playerStarting}
             onSetPrompt={state.setPrompt}
             onSelectAgent={state.setSelectedAgent}
             onSubmit={() => void state.onSubmit()}
             onStop={() => void state.onStop()}
+            onPreview={state.onPreview}
           />
         </div>
       </main>

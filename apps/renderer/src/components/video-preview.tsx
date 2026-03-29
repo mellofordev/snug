@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type CSSProperties } from "react";
 
 import type { RenderHistoryItem, RenderProgress } from "@acme/contracts";
 import {
@@ -95,16 +95,28 @@ export function VideoPreview({
     ? `${(selected.meta.durationInFrames / selected.meta.fps).toFixed(1)}s`
     : "";
 
+  const noDrag = { WebkitAppRegion: "no-drag" } as CSSProperties;
+  const dragRegion = { WebkitAppRegion: "drag" } as CSSProperties;
+
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
-      {/* Header bar */}
-      <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2">
-        <Button variant="ghost" size="sm" onClick={onBack} className="gap-1.5">
+      {/* Replaces the project TopBar while preview is open */}
+      <header
+        className="flex min-h-11 shrink-0 items-center gap-2 border-b border-border px-5 py-2"
+        style={dragRegion}
+      >
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onBack}
+          className="gap-1.5"
+          style={noDrag}
+        >
           <HugeiconsIcon icon={ArrowLeft02Icon} size={14} />
           Output
         </Button>
 
-        <div className="mx-2 h-4 w-px bg-border" />
+        <div className="mx-1 h-4 w-px shrink-0 bg-border" style={noDrag} />
 
         <DropdownMenu
           onOpenChange={(open) => {
@@ -117,6 +129,7 @@ export function VideoPreview({
               "hover:bg-input/50 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
               "data-[popup-open]:bg-input/50"
             )}
+            style={noDrag}
           >
             <span className="truncate text-left">
               {effectiveCompositionId || "Open menu to load…"}
@@ -152,12 +165,12 @@ export function VideoPreview({
         </DropdownMenu>
 
         {selected && (
-          <span className="text-[10px] text-muted-foreground">
+          <span className="min-w-0 truncate text-[10px] text-muted-foreground" style={noDrag}>
             {selected.meta.width}x{selected.meta.height} · {selected.meta.fps}fps · {duration}
           </span>
         )}
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex min-w-0 items-center gap-2" style={noDrag}>
           {isRendering && (
             <div className="flex items-center gap-2">
               <div className="h-1.5 w-24 overflow-hidden rounded-full bg-muted">
@@ -196,6 +209,7 @@ export function VideoPreview({
                 buttonVariants({ variant: "outline", size: "icon-sm" }),
                 "shrink-0"
               )}
+              style={noDrag}
             >
               <HugeiconsIcon icon={History} size={14} />
             </DropdownMenuTrigger>
@@ -219,23 +233,26 @@ export function VideoPreview({
             size="sm"
             disabled={!effectiveCompositionId || isRendering}
             onClick={() => onRender(effectiveCompositionId)}
-            className="gap-1.5"
+            className="shrink-0 gap-1.5"
+            style={noDrag}
           >
             <HugeiconsIcon icon={Video01Icon} size={14} />
             Render
           </Button>
         </div>
-      </div>
+      </header>
 
-      {/* Player iframe */}
-      <div className="min-h-0 flex-1 bg-black">
-        <iframe
-          ref={iframeRef}
-          src={playerUrl}
-          className="h-full w-full border-0"
-          sandbox="allow-scripts allow-same-origin"
-          onLoad={handleIframeLoad}
-        />
+      {/* Player — inset from chrome and composer */}
+      <div className="flex min-h-0 flex-1 flex-col bg-background px-4 pb-4 pt-3">
+        <div className="relative min-h-0 flex-1 overflow-hidden rounded-xl bg-black shadow-sm ring-1 ring-border/40">
+          <iframe
+            ref={iframeRef}
+            src={playerUrl}
+            className="absolute inset-0 size-full border-0"
+            sandbox="allow-scripts allow-same-origin"
+            onLoad={handleIframeLoad}
+          />
+        </div>
       </div>
     </div>
   );
