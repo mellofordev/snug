@@ -34,20 +34,14 @@ interface ComposerProps {
   onPreview: () => Promise<void>;
 }
 
-const CLAUDE_LOGO_URL = "https://cdn.snug.video/assets/claude-logo.svg";
-
-function AgentIcon({ agentId, agentName }: { agentId: AgentId | ""; agentName?: string | undefined }) {
-  if (agentId !== "claude-code") return null;
-
-  return (
-    <img
-      src={CLAUDE_LOGO_URL}
-      alt=""
-      aria-hidden="true"
-      className="size-3.5 shrink-0 object-contain"
-    />
-  );
-}
+const AGENT_META = {
+  "claude-code": {
+    icon: "https://cdn.snug.video/assets/claude-logo.svg"
+  },
+  codex: {
+    icon: "https://cdn.snug.video/assets/codex-logo.svg"
+  }
+} as const;
 
 export function Composer({
   prompt,
@@ -67,6 +61,7 @@ export function Composer({
   const unavailableAgents = agents.filter((a) => !a.available);
   const canSubmit = !!selectedAgent && !!prompt.trim() && !!workingDirectory;
   const selectedAgentName = agents.find((a) => a.id === selectedAgent)?.name;
+  const selectedAgentMeta = selectedAgent ? AGENT_META[selectedAgent] : undefined;
   const showPreview = !!workingDirectory && !isRunning;
 
   return (
@@ -89,23 +84,48 @@ export function Composer({
               disabled={isRunning}
               className="inline-flex h-6 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
             >
-              <AgentIcon agentId={selectedAgent} agentName={selectedAgentName} />
+              {selectedAgentMeta && (
+                <img
+                  src={selectedAgentMeta.icon}
+                  alt=""
+                  aria-hidden="true"
+                  className="size-3.5 shrink-0 object-contain"
+                />
+              )}
               {selectedAgentName ?? "Agent"}
               <HugeiconsIcon icon={ArrowDown01Icon} size={12} className="opacity-50" />
             </DropdownMenuTrigger>
             <DropdownMenuContent side="top" align="start" sideOffset={8}>
               <DropdownMenuGroup>
                 <DropdownMenuLabel>Select agent</DropdownMenuLabel>
-                <DropdownMenuSeparator />
                 {availableAgents.map((a) => (
                   <DropdownMenuItem
                     key={a.id}
                     onClick={() => onSelectAgent(a.id)}
                   >
-                    <AgentIcon agentId={a.id} agentName={a.name} />
+                    {AGENT_META[a.id] && (
+                      <img
+                        src={AGENT_META[a.id].icon}
+                        alt=""
+                        aria-hidden="true"
+                        className="size-3.5 shrink-0 object-contain"
+                      />
+                    )}
                     {a.name}
                   </DropdownMenuItem>
                 ))}
+              </DropdownMenuGroup>
+              <DropdownMenuGroup>
+                <DropdownMenuItem disabled>
+                  <img
+                    src={AGENT_META.codex.icon}
+                    alt=""
+                    aria-hidden="true"
+                    className="size-3.5 shrink-0 object-contain"
+                  />
+                  Codex
+                  <span className="ml-auto text-xs text-muted-foreground">Coming soon</span>
+                </DropdownMenuItem>
               </DropdownMenuGroup>
               {unavailableAgents.length > 0 && (
                 <DropdownMenuGroup>
@@ -115,7 +135,14 @@ export function Composer({
                       key={a.id}
                       disabled
                     >
-                      <AgentIcon agentId={a.id} agentName={a.name} />
+                      {AGENT_META[a.id] && (
+                        <img
+                          src={AGENT_META[a.id].icon}
+                          alt=""
+                          aria-hidden="true"
+                          className="size-3.5 shrink-0 object-contain"
+                        />
+                      )}
                       {a.name} (not found)
                     </DropdownMenuItem>
                   ))}
