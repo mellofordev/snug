@@ -47,7 +47,8 @@
       "icon": "assets/icon.png"
     },
     "dmg": {
-      "title": "${productName} ${version}"
+      "title": "${productName}",
+      "artifactName": "${productName}.${ext}"
     }
   }
 }

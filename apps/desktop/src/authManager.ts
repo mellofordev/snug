@@ -1,5 +1,5 @@
 import http from "node:http";
-import { safeStorage, shell } from "electron";
+import { shell } from "electron";
 
 import type { User } from "@acme/contracts";
 
@@ -161,32 +161,12 @@ export async function logout(settingsStore: SettingsStore): Promise<void> {
   await settingsStore.clearAuthToken();
 }
 
-// ── Token Storage (safeStorage) ─────────────────────────────────────────
+// ── Token Storage ──────────────────────────────────────────────────────
 
 async function storeToken(token: string, store: SettingsStore): Promise<void> {
-  if (safeStorage.isEncryptionAvailable()) {
-    const encrypted = safeStorage.encryptString(token).toString("base64");
-    await store.setAuthToken(encrypted);
-  } else {
-    // Fallback: store plaintext (rare — only if OS keychain unavailable)
-    console.warn("[auth] safeStorage unavailable — storing token unencrypted");
-    await store.setAuthToken(token);
-  }
+  await store.setAuthToken(token);
 }
 
 function readToken(store: SettingsStore): string | null {
-  const stored = store.getAuthToken();
-  if (!stored) return null;
-
-  if (safeStorage.isEncryptionAvailable()) {
-    try {
-      return safeStorage.decryptString(Buffer.from(stored, "base64"));
-    } catch {
-      // Stored value might be plaintext from a previous fallback
-      return stored;
-    }
-  }
-
-  // safeStorage unavailable — assume plaintext
-  return stored;
+  return store.getAuthToken();
 }
