@@ -1,5 +1,10 @@
 import type { Agent, AgentId } from "@acme/contracts";
-import { ArrowDown01Icon, PlayIcon, Rocket01FreeIcons, StopIcon } from "@hugeicons/core-free-icons";
+import {
+  ArrowDown01Icon,
+  PlayIcon,
+  Rocket01FreeIcons,
+  StopIcon
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 
 import { Button } from "@/components/ui/button";
@@ -12,7 +17,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
-import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 
 interface ComposerProps {
@@ -21,11 +25,23 @@ interface ComposerProps {
   agents: Agent[];
   selectedAgent: AgentId | "";
   isRunning: boolean;
+  playerRunning: boolean;
+  playerStarting: boolean;
   onSetPrompt: (value: string) => void;
   onSelectAgent: (id: AgentId) => void;
   onSubmit: () => void;
   onStop: () => void;
+  onPreview: () => Promise<void>;
 }
+
+const AGENT_META = {
+  "claude-code": {
+    icon: "https://cdn.snug.video/assets/claude-logo.svg"
+  },
+  codex: {
+    icon: "https://cdn.snug.video/assets/codex-logo.svg"
+  }
+} as const;
 
 export function Composer({
   prompt,
@@ -33,19 +49,24 @@ export function Composer({
   agents,
   selectedAgent,
   isRunning,
+  playerRunning,
+  playerStarting,
   onSetPrompt,
   onSelectAgent,
   onSubmit,
-  onStop
+  onStop,
+  onPreview
 }: ComposerProps) {
   const availableAgents = agents.filter((a) => a.available);
   const unavailableAgents = agents.filter((a) => !a.available);
   const canSubmit = !!selectedAgent && !!prompt.trim() && !!workingDirectory;
   const selectedAgentName = agents.find((a) => a.id === selectedAgent)?.name;
+  const selectedAgentMeta = selectedAgent ? AGENT_META[selectedAgent] : undefined;
+  const showPreview = !!workingDirectory && !isRunning;
 
   return (
-    <div className="shrink-0 px-5 pb-3">
-      <div className="rounded-2xl bg-muted/50 ring-1 ring-border/60">
+    <div className="shrink-0 px-5 pt-3 pb-3">
+      <div className="rounded-[calc(var(--radius)+8px)] bg-muted/50 ring-1 ring-border/60">
         <Textarea
           value={prompt}
           onChange={(e) => onSetPrompt(e.target.value)}
@@ -63,21 +84,48 @@ export function Composer({
               disabled={isRunning}
               className="inline-flex h-6 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
             >
+              {selectedAgentMeta && (
+                <img
+                  src={selectedAgentMeta.icon}
+                  alt=""
+                  aria-hidden="true"
+                  className="size-3.5 shrink-0 object-contain"
+                />
+              )}
               {selectedAgentName ?? "Agent"}
               <HugeiconsIcon icon={ArrowDown01Icon} size={12} className="opacity-50" />
             </DropdownMenuTrigger>
             <DropdownMenuContent side="top" align="start" sideOffset={8}>
               <DropdownMenuGroup>
                 <DropdownMenuLabel>Select agent</DropdownMenuLabel>
-                <DropdownMenuSeparator />
                 {availableAgents.map((a) => (
                   <DropdownMenuItem
                     key={a.id}
                     onClick={() => onSelectAgent(a.id)}
                   >
+                    {AGENT_META[a.id] && (
+                      <img
+                        src={AGENT_META[a.id].icon}
+                        alt=""
+                        aria-hidden="true"
+                        className="size-3.5 shrink-0 object-contain"
+                      />
+                    )}
                     {a.name}
                   </DropdownMenuItem>
                 ))}
+              </DropdownMenuGroup>
+              <DropdownMenuGroup>
+                <DropdownMenuItem disabled>
+                  <img
+                    src={AGENT_META.codex.icon}
+                    alt=""
+                    aria-hidden="true"
+                    className="size-3.5 shrink-0 object-contain"
+                  />
+                  Codex
+                  <span className="ml-auto text-xs text-muted-foreground">Coming soon</span>
+                </DropdownMenuItem>
               </DropdownMenuGroup>
               {unavailableAgents.length > 0 && (
                 <DropdownMenuGroup>
@@ -87,6 +135,14 @@ export function Composer({
                       key={a.id}
                       disabled
                     >
+                      {AGENT_META[a.id] && (
+                        <img
+                          src={AGENT_META[a.id].icon}
+                          alt=""
+                          aria-hidden="true"
+                          className="size-3.5 shrink-0 object-contain"
+                        />
+                      )}
                       {a.name} (not found)
                     </DropdownMenuItem>
                   ))}
@@ -94,6 +150,38 @@ export function Composer({
               )}
             </DropdownMenuContent>
           </DropdownMenu>
+
+          {showPreview && (
+            <div className="flex min-w-0 items-center gap-2 pl-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1.5 px-2.5 text-xs"
+                disabled={playerStarting}
+                title={
+                  playerRunning && !playerStarting
+                    ? "Player running — open preview"
+                    : undefined
+                }
+                onClick={() => void onPreview()}
+              >
+                {playerRunning && !playerStarting ? (
+                  <span
+                    className="player-ready-dot size-2.5 shrink-0 rounded-full bg-emerald-500"
+                    aria-hidden
+                  />
+                ) : (
+                  <HugeiconsIcon icon={PlayIcon} size={14} />
+                )}
+                {playerStarting ? "Starting…" : "Preview"}
+              </Button>
+              {playerStarting && (
+                <span className="hidden truncate text-[10px] text-muted-foreground sm:inline">
+                  Starting Remotion player…
+                </span>
+              )}
+            </div>
+          )}
 
           <div className="ml-auto">
             {isRunning ? (
@@ -121,9 +209,9 @@ export function Composer({
         </div>
       </div>
 
-      <div className="flex items-center justify-between px-2 pt-1.5">
+      {/* <div className="flex items-center justify-between px-2 pt-1.5">
         <span className="text-[10px] text-muted-foreground/40">⌘ Enter to run</span>
-      </div>
+      </div> */}
     </div>
   );
 }

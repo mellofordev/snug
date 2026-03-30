@@ -12,7 +12,8 @@
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",
     "build:contracts": "bun run --cwd packages/contracts build",
-    "dist:mac": "bun run build && node scripts/build-desktop-dmg.mjs"
+    "dist:mac": "bun run build && node scripts/build-desktop-dmg.mjs",
+    "dev:api": "bun run --cwd apps/api dev"
   },
   "devDependencies": {
     "turbo": "^2.3.3",

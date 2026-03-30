@@ -31,10 +31,16 @@ const nativeApi: NativeApi = {
     setLastOpenedDirectory: (dir) => ipcRenderer.invoke(IPC_CHANNELS.settingsSetLastDir, dir)
   },
   fs: {
-    createDirectory: (fullPath) => ipcRenderer.invoke(IPC_CHANNELS.fsCreateDirectory, fullPath)
+    createDirectory: (fullPath) => ipcRenderer.invoke(IPC_CHANNELS.fsCreateDirectory, fullPath),
+    renamePath: (from, to) => ipcRenderer.invoke(IPC_CHANNELS.fsRenamePath, from, to),
+    removePath: (fullPath) => ipcRenderer.invoke(IPC_CHANNELS.fsRemovePath, fullPath)
   },
   shell: {
-    openPath: (filePath) => ipcRenderer.invoke(IPC_CHANNELS.shellOpenPath, filePath)
+    openPath: (filePath) => ipcRenderer.invoke(IPC_CHANNELS.shellOpenPath, filePath),
+    revealPath: (filePath) => ipcRenderer.invoke(IPC_CHANNELS.shellRevealPath, filePath)
+  },
+  window: {
+    setBackgroundColor: (color) => ipcRenderer.invoke(IPC_CHANNELS.windowSetBackgroundColor, color)
   },
   project: {
     init: (dir) => ipcRenderer.invoke(IPC_CHANNELS.projectInit, dir),
@@ -53,6 +59,11 @@ const nativeApi: NativeApi = {
     listOutputs: (dir) => ipcRenderer.invoke(IPC_CHANNELS.projectListOutputs, dir),
     listCompositions: (dir) => ipcRenderer.invoke(IPC_CHANNELS.projectListCompositions, dir),
     readSystemPrompt: (dir) => ipcRenderer.invoke(IPC_CHANNELS.projectReadSystemPrompt, dir)
+  },
+  auth: {
+    login: () => ipcRenderer.invoke(IPC_CHANNELS.authLogin),
+    getSession: () => ipcRenderer.invoke(IPC_CHANNELS.authGetSession),
+    logout: () => ipcRenderer.invoke(IPC_CHANNELS.authLogout)
   }
 };
 

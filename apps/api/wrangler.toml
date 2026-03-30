@@ -1,0 +1,10 @@
+# Used by `bun run deploy` → `npx wrangler deploy` (no wrangler in package.json).
+# Workers still run on workerd (V8), not Bun — same Hono app as local `bun run dev`.
+name = "snug-api"
+main = "src/index.ts"
+compatibility_date = "2025-03-01"
+
+# Required secrets (set via: npx wrangler secret put <NAME>):
+#   GOOGLE_CLIENT_ID
+#   GOOGLE_CLIENT_SECRET
+#   JWT_SECRET

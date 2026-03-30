@@ -6,6 +6,7 @@ import { promptInputSchema } from "@acme/contracts";
 
 import { IPC_CHANNELS } from "./ipcChannels";
 import { detectAgents, runPrompt, stopPrompt } from "./agentManager";
+import { loginWithGoogle, getSession, logout } from "./authManager";
 import {
   initProject,
   startPlayer,
@@ -19,6 +20,9 @@ import {
 import { SettingsStore } from "./settingsStore";
 
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
+const apiBaseUrl = isDevelopment
+  ? (process.env.SNUG_API_URL ?? "http://localhost:8787")
+  : "https://api.snug.video";
 const iconPath = path.join(__dirname, "../assets/icon.png");
 
 function rendererIndexPath(): string {
@@ -125,6 +129,21 @@ function registerIpcHandlers(): void {
     return fullPath;
   });
 
+  ipcMain.handle(IPC_CHANNELS.fsRenamePath, async (_event, from: unknown, to: unknown) => {
+    if (typeof from !== "string" || !from || typeof to !== "string" || !to) {
+      throw new Error("Invalid rename paths");
+    }
+    await fs.rename(from, to);
+    return to;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.fsRemovePath, async (_event, fullPath: unknown) => {
+    if (typeof fullPath !== "string" || !fullPath) {
+      throw new Error("Invalid path");
+    }
+    await fs.rm(fullPath, { recursive: true, force: true });
+  });
+
   ipcMain.handle(IPC_CHANNELS.shellOpenPath, async (_event, filePath: unknown) => {
     if (typeof filePath !== "string" || !filePath) {
       throw new Error("Invalid file path");
@@ -133,6 +152,20 @@ function registerIpcHandlers(): void {
     if (err) {
       throw new Error(err);
     }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.shellRevealPath, async (_event, filePath: unknown) => {
+    if (typeof filePath !== "string" || !filePath) {
+      throw new Error("Invalid file path");
+    }
+    shell.showItemInFolder(filePath);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.windowSetBackgroundColor, async (_event, color: unknown) => {
+    if (typeof color !== "string" || !color) {
+      throw new Error("Invalid color");
+    }
+    mainWindow?.setBackgroundColor(color);
   });
 
   // ── Project handlers ──────────────────────────────────────────────
@@ -174,6 +207,20 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.projectReadSystemPrompt, async (_event, dir: unknown) => {
     if (typeof dir !== "string") throw new Error("Invalid directory");
     return readSystemPrompt(dir);
+  });
+
+  // ── Auth handlers ─────────────────────────────────────────────────
+
+  ipcMain.handle(IPC_CHANNELS.authLogin, async () => {
+    return loginWithGoogle(apiBaseUrl, settingsStore);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.authGetSession, async () => {
+    return getSession(apiBaseUrl, settingsStore);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.authLogout, async () => {
+    return logout(settingsStore);
   });
 }
 

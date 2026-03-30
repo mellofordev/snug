@@ -9,7 +9,11 @@ export const IPC_CHANNELS = {
   settingsGetLastDir: "settings:get-last-dir",
   settingsSetLastDir: "settings:set-last-dir",
   fsCreateDirectory: "fs:create-directory",
+  fsRenamePath: "fs:rename-path",
+  fsRemovePath: "fs:remove-path",
   shellOpenPath: "shell:open-path",
+  shellRevealPath: "shell:reveal-path",
+  windowSetBackgroundColor: "window:set-background-color",
   projectInit: "project:init",
   projectStartPlayer: "project:start-player",
   projectStopPlayer: "project:stop-player",
@@ -17,5 +21,8 @@ export const IPC_CHANNELS = {
   projectRenderProgress: "project:render-progress",
   projectListOutputs: "project:list-outputs",
   projectListCompositions: "project:list-compositions",
-  projectReadSystemPrompt: "project:read-system-prompt"
+  projectReadSystemPrompt: "project:read-system-prompt",
+  authLogin: "auth:login",
+  authGetSession: "auth:get-session",
+  authLogout: "auth:logout"
 } as const;

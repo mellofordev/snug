@@ -9,3 +9,5 @@ apps/*/dist-electron
 packages/*/dist
 apps/desktop/release
 apps/desktop/bundled-renderer
+.env
+.env.local

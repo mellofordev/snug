@@ -1,5 +1,7 @@
-import type { PromptOutput } from "@acme/contracts";
-import { Add01Icon, FolderOpenIcon } from "@hugeicons/core-free-icons";
+import * as React from "react";
+
+import type { PromptOutput, User } from "@acme/contracts";
+import { Add01Icon, ComputerIcon, Delete02Icon, Edit02Icon, FolderOpenIcon, FolderViewIcon, LogoutIcon, MenuIcon, Moon02Icon, SettingsIcon, SunIcon, UserIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +15,21 @@ import {
   DialogTitle,
   DialogTrigger
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
+import { useTheme, type ThemePreference } from "@/components/theme-provider";
 import { Input } from "@/components/ui/input";
 import {
   Sidebar,
@@ -24,6 +41,7 @@ import {
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
+  SidebarMenuAction,
   SidebarMenuItem,
   SidebarProvider,
 } from "@/components/ui/sidebar";
@@ -33,15 +51,8 @@ function projectLabel(fullPath: string) {
   return parts[parts.length - 1] ?? fullPath;
 }
 
-function truncatePath(path: string, max = 38) {
-  if (path.length <= max) return path;
-  const keep = max - 3;
-  const head = Math.ceil(keep / 2);
-  const tail = Math.floor(keep / 2);
-  return `${path.slice(0, head)}…${path.slice(-tail)}`;
-}
-
 interface SidePanelProps {
+  user: User;
   recentProjects: string[];
   workingDirectory: string;
   currentRun: PromptOutput | null;
@@ -52,15 +63,19 @@ interface SidePanelProps {
   creatingProject: boolean;
   createStage: "scaffold" | "install" | "player" | null;
   onSelectProject: (path: string) => void;
+  onRenameProject: (path: string, nextName: string) => void;
+  onDeleteProject: (path: string) => void;
+  onRevealProject: (path: string) => void;
   onNewProject: () => void;
   onCreateProject: () => void;
   onChangeBaseDirectory: () => void;
-  onSelectDirectory: () => void;
   onSetNewProjectName: (name: string) => void;
   onCloseSidebarNewProject: () => void;
+  onLogout: () => void;
 }
 
 export function SidePanel({
+  user,
   recentProjects,
   workingDirectory,
   currentRun,
@@ -71,23 +86,95 @@ export function SidePanel({
   creatingProject,
   createStage,
   onSelectProject,
+  onRenameProject,
+  onDeleteProject,
+  onRevealProject,
   onNewProject,
   onCreateProject,
   onChangeBaseDirectory,
-  onSelectDirectory,
   onSetNewProjectName,
-  onCloseSidebarNewProject
+  onCloseSidebarNewProject,
+  onLogout
 }: SidePanelProps) {
+  const { theme, setTheme } = useTheme();
+  const [renameTargetPath, setRenameTargetPath] = React.useState<string | null>(null);
+  const [renameValue, setRenameValue] = React.useState("");
+  const [deleteTargetPath, setDeleteTargetPath] = React.useState<string | null>(null);
+
   return (
     <SidebarProvider className="min-h-0 w-auto flex-none">
       <Sidebar collapsible="none">
         {/* Draggable header — traffic lights sit here on macOS */}
         <SidebarHeader
-          className="h-[38px] flex-row items-center gap-2 pl-[78px] pr-3"
+          className="box-border h-[38px] min-h-[38px] max-h-[38px] flex-row flex-nowrap items-center justify-between gap-2 p-0 pl-[78px] pr-2"
           style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
         >
-          <span className="text-sm font-semibold tracking-tight">snug</span>
-          <Badge variant="secondary" className="text-[10px]">beta</Badge>
+          <div className="flex h-full min-w-0 items-center gap-2">
+            <span className="text-sm font-semibold leading-tight tracking-tight">
+              snug
+            </span>
+            <Badge
+              variant="secondary"
+              className="h-5 shrink-0 px-1.5 py-0 text-[10px] font-medium leading-none"
+            >
+              beta
+            </Badge>
+          </div>
+
+          <div
+            className="flex h-full shrink-0 items-center self-stretch"
+            style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+          >
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                className="inline-flex border  rounded-full h-5 w-5 min-h-5 min-w-5 max-h-5 max-w-5 shrink-0 items-center justify-center  p-0 text-muted-foreground shadow-none transition-colors hover:bg-muted/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label="Account menu"
+              >
+                <HugeiconsIcon icon={UserIcon} size={14} strokeWidth={2} className="shrink-0" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52">
+                <div className="px-2 py-1.5">
+                  <p className="truncate text-sm font-medium">{user.name}</p>
+                  <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+                </div>
+                <DropdownMenuSeparator />
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger className="flex items-center gap-2"><HugeiconsIcon icon={SettingsIcon} size={14} strokeWidth={2} className="shrink-0" /> Settings</DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="min-w-44">
+                    <DropdownMenuGroup>
+                      <DropdownMenuLabel className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <HugeiconsIcon icon={SunIcon} size={14} strokeWidth={2} className="shrink-0" />
+                        <span>Theme</span>
+                      </DropdownMenuLabel>
+                      <DropdownMenuRadioGroup
+                        value={theme}
+                        onValueChange={(value) => {
+                          if (value === "light" || value === "dark" || value === "system") {
+                            setTheme(value as ThemePreference);
+                          }
+                        }}
+                      >
+                        <DropdownMenuRadioItem value="light" className="gap-2">
+                          <HugeiconsIcon icon={SunIcon} size={14} strokeWidth={2} className="shrink-0 text-muted-foreground" />
+                          <span>Light</span>
+                        </DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="dark" className="gap-2">
+                          <HugeiconsIcon icon={Moon02Icon} size={14} strokeWidth={2} className="shrink-0 text-muted-foreground" />
+                          <span>Dark</span>
+                        </DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="system" className="gap-2">
+                          <HugeiconsIcon icon={ComputerIcon} size={14} strokeWidth={2} className="shrink-0 text-muted-foreground" />
+                          <span>System</span>
+                        </DropdownMenuRadioItem>
+                      </DropdownMenuRadioGroup>
+                    </DropdownMenuGroup>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={onLogout} className="flex items-center gap-2"><HugeiconsIcon icon={LogoutIcon} size={14} strokeWidth={2} className="shrink-0" /> Log out</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </SidebarHeader>
 
         <SidebarContent>
@@ -96,7 +183,7 @@ export function SidePanel({
             <SidebarGroupContent>
               {recentProjects.length === 0 ? (
                 <p className="px-3 py-8 text-center text-xs text-muted-foreground">
-                  Open a folder or create a new project to get started.
+                  Create a new project to get started.
                 </p>
               ) : (
                 <SidebarMenu>
@@ -114,18 +201,60 @@ export function SidePanel({
                         <SidebarMenuButton
                           isActive={active}
                           onClick={() => onSelectProject(path)}
-                          className="h-auto items-start gap-2.5 py-2"
+                          className="h-auto items-center gap-2.5 py-2 pr-10"
                         >
-                          <span className={`mt-[5px] size-1.5 shrink-0 rounded-full ${dotColor}`} />
+                          <span className={`size-1.5 shrink-0 rounded-full ${dotColor}`} />
                           <span className="min-w-0 flex-1">
-                            <span className="block truncate text-[13px] font-medium">
+                            <span className="block truncate text-sm font-normal">
                               {projectLabel(path)}
-                            </span>
-                            <span className="block truncate font-mono text-[10px] text-sidebar-foreground/50">
-                              {truncatePath(path)}
                             </span>
                           </span>
                         </SidebarMenuButton>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            className="absolute top-1/2 right-2 z-10 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-sidebar-foreground/60 opacity-0 outline-none transition-colors transition-opacity hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring group-hover/menu-item:opacity-100 data-[popup-open]:opacity-100"
+                            aria-label={`Project options for ${projectLabel(path)}`}
+                            onClick={(event) => event.stopPropagation()}
+                            onMouseDown={(event) => event.stopPropagation()}
+                          >
+                            <HugeiconsIcon icon={MenuIcon} size={14} strokeWidth={2} className="shrink-0" />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-44">
+                            <DropdownMenuItem onClick={() => onSelectProject(path)}>
+                              <HugeiconsIcon icon={FolderOpenIcon} size={14} strokeWidth={2} className="shrink-0" />
+                              Open project
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setRenameTargetPath(path);
+                                setRenameValue(projectLabel(path));
+                              }}
+                            >
+                              <HugeiconsIcon icon={Edit02Icon} size={14} strokeWidth={2} className="shrink-0" />
+                              Modify
+                            </DropdownMenuItem>
+                            <DropdownMenuSub>
+                              <DropdownMenuSubTrigger>
+                                <HugeiconsIcon icon={FolderViewIcon} size={14} strokeWidth={2} className="shrink-0" />
+                                Open in…
+                              </DropdownMenuSubTrigger>
+                              <DropdownMenuSubContent className="w-44">
+                                <DropdownMenuItem onClick={() => onRevealProject(path)}>
+                                  <HugeiconsIcon icon={FolderOpenIcon} size={14} strokeWidth={2} className="shrink-0" />
+                                  Reveal in folder
+                                </DropdownMenuItem>
+                              </DropdownMenuSubContent>
+                            </DropdownMenuSub>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onClick={() => setDeleteTargetPath(path)}
+                            >
+                              <HugeiconsIcon icon={Delete02Icon} size={14} strokeWidth={2} className="shrink-0" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </SidebarMenuItem>
                     );
                   })}
@@ -135,7 +264,7 @@ export function SidePanel({
           </SidebarGroup>
         </SidebarContent>
 
-        <SidebarFooter>
+        <SidebarFooter className="pb-3">
           <NewProjectDialog
             open={sidebarNewProjectOpen}
             baseDirectory={baseDirectory}
@@ -149,17 +278,32 @@ export function SidePanel({
             onChangeBase={onChangeBaseDirectory}
             onCreate={onCreateProject}
           />
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-center"
-            disabled={isRunning}
-            onClick={onSelectDirectory}
-          >
-            <HugeiconsIcon icon={FolderOpenIcon} size={14} />
-            Open folder
-          </Button>
         </SidebarFooter>
+        <RenameProjectDialog
+          open={Boolean(renameTargetPath)}
+          projectName={renameValue}
+          onSetProjectName={setRenameValue}
+          onClose={() => {
+            setRenameTargetPath(null);
+            setRenameValue("");
+          }}
+          onConfirm={() => {
+            if (!renameTargetPath) return;
+            onRenameProject(renameTargetPath, renameValue);
+            setRenameTargetPath(null);
+            setRenameValue("");
+          }}
+        />
+        <DeleteProjectDialog
+          open={Boolean(deleteTargetPath)}
+          projectName={deleteTargetPath ? projectLabel(deleteTargetPath) : ""}
+          onClose={() => setDeleteTargetPath(null)}
+          onConfirm={() => {
+            if (!deleteTargetPath) return;
+            onDeleteProject(deleteTargetPath);
+            setDeleteTargetPath(null);
+          }}
+        />
       </Sidebar>
     </SidebarProvider>
   );
@@ -281,6 +425,90 @@ function NewProjectDialog({
               {creating ? STAGE_LABEL[createStage ?? "scaffold"] : "Create project"}
             </Button>
           </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface RenameProjectDialogProps {
+  open: boolean;
+  projectName: string;
+  onSetProjectName: (name: string) => void;
+  onClose: () => void;
+  onConfirm: () => void;
+}
+
+function RenameProjectDialog({
+  open,
+  projectName,
+  onSetProjectName,
+  onClose,
+  onConfirm
+}: RenameProjectDialogProps) {
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Modify project</DialogTitle>
+          <DialogDescription>
+            Rename the project folder.
+          </DialogDescription>
+        </DialogHeader>
+
+        <Input
+          value={projectName}
+          onChange={(event) => onSetProjectName(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && projectName.trim()) onConfirm();
+          }}
+          placeholder="Project name"
+          autoFocus
+        />
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={onConfirm} disabled={!projectName.trim()}>
+            Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface DeleteProjectDialogProps {
+  open: boolean;
+  projectName: string;
+  onClose: () => void;
+  onConfirm: () => void;
+}
+
+function DeleteProjectDialog({
+  open,
+  projectName,
+  onClose,
+  onConfirm
+}: DeleteProjectDialogProps) {
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Delete project</DialogTitle>
+          <DialogDescription>
+            This will permanently delete <span className="font-medium text-foreground">{projectName}</span> from disk.
+          </DialogDescription>
+        </DialogHeader>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="destructive" onClick={onConfirm}>
+            Delete
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

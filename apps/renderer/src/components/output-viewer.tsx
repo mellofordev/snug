@@ -1,40 +1,25 @@
 import { useEffect, useRef } from "react";
 
 import type { PromptOutput } from "@acme/contracts";
-import { PlayIcon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 
+import { WritePromptIllustration } from "@/components/illustration/write-prompt";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface OutputViewerProps {
   currentRun: PromptOutput | null;
   isRunning: boolean;
-  playerRunning: boolean;
-  playerStarting: boolean;
-  workingDirectory: string;
-  onPreview: () => Promise<void>;
 }
 
-export function OutputViewer({
-  currentRun,
-  isRunning,
-  playerRunning,
-  playerStarting,
-  workingDirectory,
-  onPreview
-}: OutputViewerProps) {
+export function OutputViewer({ currentRun, isRunning }: OutputViewerProps) {
   const outputEndRef = useRef<HTMLDivElement>(null);
+  const hasOutput = Boolean(currentRun?.output);
 
   useEffect(() => {
     outputEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [currentRun?.output]);
 
   const hasStatus = isRunning || (currentRun && currentRun.status !== "running");
-
-  // Show preview button whenever a project is open and not currently generating
-  const showPreview = !!workingDirectory && !isRunning;
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
@@ -59,40 +44,24 @@ export function OutputViewer({
       )}
 
       <ScrollArea className="min-h-0 flex-1">
-        <pre className="whitespace-pre-wrap px-6 py-5 font-mono text-[12px] leading-relaxed text-foreground/80">
-          {currentRun?.output || (
-            <span className="text-muted-foreground/60">
-              Select an agent, pick a Remotion project folder, and describe the video
-              you want. Agent output streams here in real-time.
-            </span>
-          )}
-          <div ref={outputEndRef} />
-        </pre>
+        {hasOutput ? (
+          <pre className="whitespace-pre-wrap px-6 py-5 font-mono text-[12px] leading-relaxed text-foreground/80">
+            {currentRun?.output}
+            <div ref={outputEndRef} />
+          </pre>
+        ) : (
+          <div className="flex min-h-full items-center justify-center px-6 py-10">
+            <div className="flex max-w-sm flex-col items-center text-center">
+              <div className="-mb-6 opacity-35">
+                <WritePromptIllustration className="size-[250px]" />
+              </div>
+              <p className="text-sm font-normal text-muted-foreground/60">
+                Prompt your video idea
+              </p>
+            </div>
+          </div>
+        )}
       </ScrollArea>
-
-      {showPreview && (
-        <div className="shrink-0 border-t border-border bg-muted/30 px-5 py-3 flex items-center gap-3">
-          <Button
-            size="sm"
-            className="gap-2"
-            disabled={playerStarting}
-            onClick={() => void onPreview()}
-          >
-            <HugeiconsIcon icon={PlayIcon} size={14} />
-            {playerStarting ? "Starting player…" : "Preview"}
-          </Button>
-          {playerStarting && (
-            <span className="text-xs text-muted-foreground">
-              Starting Remotion player…
-            </span>
-          )}
-          {!playerStarting && playerRunning && (
-            <span className="text-xs text-muted-foreground">
-              Player ready
-            </span>
-          )}
-        </div>
-      )}
     </div>
   );
 }
