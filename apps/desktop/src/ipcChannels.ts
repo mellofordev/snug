@@ -13,6 +13,7 @@ export const IPC_CHANNELS = {
   fsRemovePath: "fs:remove-path",
   shellOpenPath: "shell:open-path",
   shellRevealPath: "shell:reveal-path",
+  windowSetBackgroundColor: "window:set-background-color",
   projectInit: "project:init",
   projectStartPlayer: "project:start-player",
   projectStopPlayer: "project:stop-player",

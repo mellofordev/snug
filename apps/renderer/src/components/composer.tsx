@@ -34,6 +34,21 @@ interface ComposerProps {
   onPreview: () => Promise<void>;
 }
 
+const CLAUDE_LOGO_URL = "https://cdn.snug.video/assets/claude-logo.svg";
+
+function AgentIcon({ agentId, agentName }: { agentId: AgentId | ""; agentName?: string | undefined }) {
+  if (agentId !== "claude-code") return null;
+
+  return (
+    <img
+      src={CLAUDE_LOGO_URL}
+      alt=""
+      aria-hidden="true"
+      className="size-3.5 shrink-0 object-contain"
+    />
+  );
+}
+
 export function Composer({
   prompt,
   workingDirectory,
@@ -74,6 +89,7 @@ export function Composer({
               disabled={isRunning}
               className="inline-flex h-6 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
             >
+              <AgentIcon agentId={selectedAgent} agentName={selectedAgentName} />
               {selectedAgentName ?? "Agent"}
               <HugeiconsIcon icon={ArrowDown01Icon} size={12} className="opacity-50" />
             </DropdownMenuTrigger>
@@ -86,6 +102,7 @@ export function Composer({
                     key={a.id}
                     onClick={() => onSelectAgent(a.id)}
                   >
+                    <AgentIcon agentId={a.id} agentName={a.name} />
                     {a.name}
                   </DropdownMenuItem>
                 ))}
@@ -98,6 +115,7 @@ export function Composer({
                       key={a.id}
                       disabled
                     >
+                      <AgentIcon agentId={a.id} agentName={a.name} />
                       {a.name} (not found)
                     </DropdownMenuItem>
                   ))}

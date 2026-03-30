@@ -161,6 +161,13 @@ function registerIpcHandlers(): void {
     shell.showItemInFolder(filePath);
   });
 
+  ipcMain.handle(IPC_CHANNELS.windowSetBackgroundColor, async (_event, color: unknown) => {
+    if (typeof color !== "string" || !color) {
+      throw new Error("Invalid color");
+    }
+    mainWindow?.setBackgroundColor(color);
+  });
+
   // ── Project handlers ──────────────────────────────────────────────
 
   ipcMain.handle(IPC_CHANNELS.projectInit, async (_event, dir: unknown) => {

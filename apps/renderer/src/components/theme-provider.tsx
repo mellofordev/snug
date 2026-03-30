@@ -44,6 +44,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       root.classList.toggle("dark", dark);
       root.style.colorScheme = dark ? "dark" : "light";
       setResolvedTheme(dark ? "dark" : "light");
+      const bg = getComputedStyle(root).getPropertyValue("--background").trim();
+      const color = bg ? `oklch(${bg})` : dark ? "#1f1f20" : "#ffffff";
+      void window.nativeApi?.window.setBackgroundColor(color);
     };
 
     apply();

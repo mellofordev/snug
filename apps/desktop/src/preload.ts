@@ -39,6 +39,9 @@ const nativeApi: NativeApi = {
     openPath: (filePath) => ipcRenderer.invoke(IPC_CHANNELS.shellOpenPath, filePath),
     revealPath: (filePath) => ipcRenderer.invoke(IPC_CHANNELS.shellRevealPath, filePath)
   },
+  window: {
+    setBackgroundColor: (color) => ipcRenderer.invoke(IPC_CHANNELS.windowSetBackgroundColor, color)
+  },
   project: {
     init: (dir) => ipcRenderer.invoke(IPC_CHANNELS.projectInit, dir),
     startPlayer: (dir) => ipcRenderer.invoke(IPC_CHANNELS.projectStartPlayer, dir),

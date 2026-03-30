@@ -23,6 +23,7 @@ export const IPC_CHANNELS = {
   fsRemovePath: "fs:remove-path",
   shellOpenPath: "shell:open-path",
   shellRevealPath: "shell:reveal-path",
+  windowSetBackgroundColor: "window:set-background-color",
   projectInit: "project:init",
   projectStartPlayer: "project:start-player",
   projectStopPlayer: "project:stop-player",
@@ -63,6 +64,9 @@ export interface NativeApi {
     /** Opens a file with the OS default app (e.g. QuickTime for video on macOS). */
     openPath: (filePath: string) => Promise<void>;
     revealPath: (filePath: string) => Promise<void>;
+  };
+  window: {
+    setBackgroundColor: (color: string) => Promise<void>;
   };
   project: {
     init: (dir: string) => Promise<{ success: boolean; error?: string }>;

@@ -127,7 +127,7 @@ export function SidePanel({
           >
             <DropdownMenu>
               <DropdownMenuTrigger
-                className="inline-flex border rounded-full h-5 w-5 min-h-5 min-w-5 max-h-5 max-w-5 shrink-0 items-center justify-center  p-0 text-muted-foreground shadow-none transition-colors hover:bg-muted/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex border  rounded-full h-5 w-5 min-h-5 min-w-5 max-h-5 max-w-5 shrink-0 items-center justify-center  p-0 text-muted-foreground shadow-none transition-colors hover:bg-muted/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label="Account menu"
               >
                 <HugeiconsIcon icon={UserIcon} size={14} strokeWidth={2} className="shrink-0" />
@@ -205,7 +205,7 @@ export function SidePanel({
                         >
                           <span className={`size-1.5 shrink-0 rounded-full ${dotColor}`} />
                           <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-medium">
+                            <span className="block truncate text-sm font-normal">
                               {projectLabel(path)}
                             </span>
                           </span>
