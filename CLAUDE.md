@@ -22,13 +22,14 @@ The dev startup sequence matters: `dev-electron.mjs` waits for the Vite server o
 
 ## Architecture
 
-This is a Bun + Turborepo monorepo with four workspace packages:
+This is a Bun + Turborepo monorepo with five workspace packages:
 
 ```
 packages/contracts/   — shared Zod schemas + TypeScript types + IPC channel constants
 packages/scaffold/    — Remotion project template on disk + scripts/init-project.sh (used when creating a new project)
 apps/desktop/         — Electron main process + preload script
 apps/renderer/        — React + Vite + Tailwind UI (runs in Electron's renderer)
+apps/api/             — Hono API on Cloudflare Workers (auth, user management via Drizzle + Supabase Postgres)
 ```
 
 ### Data flow
@@ -53,7 +54,11 @@ New projects: `project:init` runs `packages/scaffold/scripts/init-project.sh`, w
 
 ### Agent orchestration
 
-`agentManager.ts` spawns CLI agents using `spawn` (not `execFile`) with `stdio: ['pipe', 'pipe', 'pipe']`. The prompt is written to **stdin** and the process is started with `-p --dangerously-skip-permissions`. Output streams from stdout/stderr are forwarded in real-time to the renderer via `mainWindow.webContents.send(IPC_CHANNELS.promptOutput, ...)`. The resolved binary path from `which` is cached at detection time and reused at run time to avoid PATH issues in the Electron process environment.
+`agentManager.ts` spawns CLI agents using `spawn` (not `execFile`) with `stdio: ['pipe', 'pipe', 'pipe']`. The prompt is written to **stdin** and the process is started with `-p --dangerously-skip-permissions --output-format stream-json --verbose`. The `--verbose` flag is **required** when using `--output-format stream-json` — without it the CLI exits with an error.
+
+Streaming JSON output is parsed line-by-line into structured `ChatMessage` objects (roles: `user`, `assistant`, `thinking`, `tool`). The `StreamParser` class handles `content_block_start`, `content_block_delta`, and `content_block_stop` events, with in-progress content streamed to the UI in real-time.
+
+The resolved binary path from `which` is cached at detection time and reused at run time to avoid PATH issues in the Electron process environment.
 
 ### Settings persistence
 

@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/sonner";
 
 import { Composer } from "@/components/composer";
 import { Onboarding } from "@/components/onboarding/index";
-import { OutputViewer } from "@/components/output-viewer";
+import { ChatViewer } from "@/components/chat-viewer";
 import { SidePanel } from "@/components/side-panel";
 import { TopBar } from "@/components/top-bar";
 import { VideoPreview } from "@/components/video-preview";
@@ -111,7 +111,7 @@ export default function App() {
                 onBack={state.switchToOutput}
               />
             ) : (
-              <OutputViewer currentRun={state.currentRun} isRunning={state.isRunning} />
+              <ChatViewer currentRun={state.currentRun} chatMessages={state.chatMessages} isRunning={state.isRunning} />
             )}
 
             <Composer
