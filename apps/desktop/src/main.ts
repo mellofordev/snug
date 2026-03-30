@@ -20,9 +20,8 @@ import {
 import { SettingsStore } from "./settingsStore";
 
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
-const apiBaseUrl = isDevelopment
-  ? (process.env.SNUG_API_URL ?? "http://localhost:8787")
-  : "https://api.snug.video";
+const apiBaseUrl = process.env.SNUG_API_URL
+  ?? (isDevelopment ? "http://localhost:8787" : "https://api.snug.video");
 const iconPath = path.join(__dirname, "../assets/icon.png");
 
 function rendererIndexPath(): string {
