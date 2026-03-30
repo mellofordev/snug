@@ -31,10 +31,13 @@ const nativeApi: NativeApi = {
     setLastOpenedDirectory: (dir) => ipcRenderer.invoke(IPC_CHANNELS.settingsSetLastDir, dir)
   },
   fs: {
-    createDirectory: (fullPath) => ipcRenderer.invoke(IPC_CHANNELS.fsCreateDirectory, fullPath)
+    createDirectory: (fullPath) => ipcRenderer.invoke(IPC_CHANNELS.fsCreateDirectory, fullPath),
+    renamePath: (from, to) => ipcRenderer.invoke(IPC_CHANNELS.fsRenamePath, from, to),
+    removePath: (fullPath) => ipcRenderer.invoke(IPC_CHANNELS.fsRemovePath, fullPath)
   },
   shell: {
-    openPath: (filePath) => ipcRenderer.invoke(IPC_CHANNELS.shellOpenPath, filePath)
+    openPath: (filePath) => ipcRenderer.invoke(IPC_CHANNELS.shellOpenPath, filePath),
+    revealPath: (filePath) => ipcRenderer.invoke(IPC_CHANNELS.shellRevealPath, filePath)
   },
   project: {
     init: (dir) => ipcRenderer.invoke(IPC_CHANNELS.projectInit, dir),

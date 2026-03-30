@@ -55,8 +55,8 @@ export function Composer({
   const showPreview = !!workingDirectory && !isRunning;
 
   return (
-    <div className="shrink-0 px-5 pb-3">
-      <div className="rounded-2xl bg-muted/50 ring-1 ring-border/60">
+    <div className="shrink-0 px-5 pt-3 pb-3">
+      <div className="rounded-[calc(var(--radius)+8px)] bg-muted/50 ring-1 ring-border/60">
         <Textarea
           value={prompt}
           onChange={(e) => onSetPrompt(e.target.value)}
@@ -164,9 +164,9 @@ export function Composer({
         </div>
       </div>
 
-      <div className="flex items-center justify-between px-2 pt-1.5">
+      {/* <div className="flex items-center justify-between px-2 pt-1.5">
         <span className="text-[10px] text-muted-foreground/40">⌘ Enter to run</span>
-      </div>
+      </div> */}
     </div>
   );
 }

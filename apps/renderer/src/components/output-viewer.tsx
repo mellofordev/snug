@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 
 import type { PromptOutput } from "@acme/contracts";
 
+import { WritePromptIllustration } from "@/components/illustration/write-prompt";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -12,6 +13,7 @@ interface OutputViewerProps {
 
 export function OutputViewer({ currentRun, isRunning }: OutputViewerProps) {
   const outputEndRef = useRef<HTMLDivElement>(null);
+  const hasOutput = Boolean(currentRun?.output);
 
   useEffect(() => {
     outputEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -42,15 +44,23 @@ export function OutputViewer({ currentRun, isRunning }: OutputViewerProps) {
       )}
 
       <ScrollArea className="min-h-0 flex-1">
-        <pre className="whitespace-pre-wrap px-6 py-5 font-mono text-[12px] leading-relaxed text-foreground/80">
-          {currentRun?.output || (
-            <span className="text-muted-foreground/60">
-              Select an agent, pick a Remotion project folder, and describe the video
-              you want. Agent output streams here in real-time.
-            </span>
-          )}
-          <div ref={outputEndRef} />
-        </pre>
+        {hasOutput ? (
+          <pre className="whitespace-pre-wrap px-6 py-5 font-mono text-[12px] leading-relaxed text-foreground/80">
+            {currentRun?.output}
+            <div ref={outputEndRef} />
+          </pre>
+        ) : (
+          <div className="flex min-h-full items-center justify-center px-6 py-10">
+            <div className="flex max-w-sm flex-col items-center text-center">
+              <div className="-mb-6 opacity-35">
+                <WritePromptIllustration className="size-[250px]" />
+              </div>
+              <p className="text-sm font-normal text-muted-foreground/60">
+                Prompt your video idea
+              </p>
+            </div>
+          </div>
+        )}
       </ScrollArea>
     </div>
   );

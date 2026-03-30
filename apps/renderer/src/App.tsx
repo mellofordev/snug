@@ -1,4 +1,5 @@
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "@/components/ui/sonner";
 
 import { Composer } from "@/components/composer";
 import { Onboarding } from "@/components/onboarding";
@@ -51,72 +52,78 @@ export default function App() {
 
   return (
     <TooltipProvider>
-      <main className="flex h-screen bg-background text-foreground">
-        <SidePanel
-          user={auth.user}
-          recentProjects={state.recentProjects}
-          workingDirectory={state.workingDirectory}
-          currentRun={state.currentRun}
-          isRunning={state.isRunning}
-          baseDirectory={state.baseDirectory}
-          sidebarNewProjectOpen={state.sidebarNewProjectOpen}
-          newProjectName={state.newProjectName}
-          creatingProject={state.creatingProject}
-          createStage={state.createStage}
-          onSelectProject={(path) => void state.setAndPersistDirectory(path)}
-          onNewProject={state.onNewProject}
-          onCreateProject={() => void state.onCreateProject()}
-          onChangeBaseDirectory={() => void state.onChangeBaseDirectory()}
-          onSetNewProjectName={state.setNewProjectName}
-          onCloseSidebarNewProject={() => state.setSidebarNewProjectOpen(false)}
-          onLogout={() => void auth.logout()}
-        />
-
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {!(state.view === "preview" && state.playerUrl) && (
-            <TopBar workingDirectory={state.workingDirectory} />
-          )}
-
-          {state.error && (
-            <div className="shrink-0 bg-destructive/5 px-5 py-2 text-sm text-destructive">
-              {state.error}
-            </div>
-          )}
-
-          {state.view === "preview" && state.playerUrl ? (
-            <VideoPreview
-              playerUrl={state.playerUrl}
-              compositions={state.compositions}
-              selectedComposition={state.selectedComposition}
-              renderProgress={state.renderProgress}
-              renderHistory={state.renderHistory}
-              onSelectComposition={state.selectComposition}
-              onCompositionMenuOpen={() => void state.refreshCompositions()}
-              onRenderHistoryMenuOpen={() => void state.refreshRenderHistory()}
-              onOpenOutputVideo={(p) => void state.openOutputVideo(p)}
-              onRender={(id) => void state.triggerRender(id)}
-              onBack={state.switchToOutput}
-            />
-          ) : (
-            <OutputViewer currentRun={state.currentRun} isRunning={state.isRunning} />
-          )}
-
-          <Composer
-            prompt={state.prompt}
+      <>
+        <main className="flex h-screen bg-background text-foreground">
+          <SidePanel
+            user={auth.user}
+            recentProjects={state.recentProjects}
             workingDirectory={state.workingDirectory}
-            agents={state.agents}
-            selectedAgent={state.selectedAgent}
+            currentRun={state.currentRun}
             isRunning={state.isRunning}
-            playerRunning={state.playerRunning}
-            playerStarting={state.playerStarting}
-            onSetPrompt={state.setPrompt}
-            onSelectAgent={state.setSelectedAgent}
-            onSubmit={() => void state.onSubmit()}
-            onStop={() => void state.onStop()}
-            onPreview={state.onPreview}
+            baseDirectory={state.baseDirectory}
+            sidebarNewProjectOpen={state.sidebarNewProjectOpen}
+            newProjectName={state.newProjectName}
+            creatingProject={state.creatingProject}
+            createStage={state.createStage}
+            onSelectProject={(path) => void state.setAndPersistDirectory(path)}
+            onRenameProject={(path, nextName) => void state.renameProject(path, nextName)}
+            onDeleteProject={(path) => void state.deleteProject(path)}
+            onRevealProject={(path) => void state.revealProject(path)}
+            onNewProject={state.onNewProject}
+            onCreateProject={() => void state.onCreateProject()}
+            onChangeBaseDirectory={() => void state.onChangeBaseDirectory()}
+            onSetNewProjectName={state.setNewProjectName}
+            onCloseSidebarNewProject={() => state.setSidebarNewProjectOpen(false)}
+            onLogout={() => void auth.logout()}
           />
-        </div>
-      </main>
+
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            {!(state.view === "preview" && state.playerUrl) && (
+              <TopBar workingDirectory={state.workingDirectory} />
+            )}
+
+            {state.error && (
+              <div className="shrink-0 bg-destructive/5 px-5 py-2 text-sm text-destructive">
+                {state.error}
+              </div>
+            )}
+
+            {state.view === "preview" && state.playerUrl ? (
+              <VideoPreview
+                playerUrl={state.playerUrl}
+                compositions={state.compositions}
+                selectedComposition={state.selectedComposition}
+                renderProgress={state.renderProgress}
+                renderHistory={state.renderHistory}
+                onSelectComposition={state.selectComposition}
+                onCompositionMenuOpen={() => void state.refreshCompositions()}
+                onRenderHistoryMenuOpen={() => void state.refreshRenderHistory()}
+                onOpenOutputVideo={(p) => void state.openOutputVideo(p)}
+                onRender={(id) => void state.triggerRender(id)}
+                onBack={state.switchToOutput}
+              />
+            ) : (
+              <OutputViewer currentRun={state.currentRun} isRunning={state.isRunning} />
+            )}
+
+            <Composer
+              prompt={state.prompt}
+              workingDirectory={state.workingDirectory}
+              agents={state.agents}
+              selectedAgent={state.selectedAgent}
+              isRunning={state.isRunning}
+              playerRunning={state.playerRunning}
+              playerStarting={state.playerStarting}
+              onSetPrompt={state.setPrompt}
+              onSelectAgent={state.setSelectedAgent}
+              onSubmit={() => void state.onSubmit()}
+              onStop={() => void state.onStop()}
+              onPreview={state.onPreview}
+            />
+          </div>
+        </main>
+        <Toaster />
+      </>
     </TooltipProvider>
   );
 }

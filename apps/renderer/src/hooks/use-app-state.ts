@@ -42,6 +42,9 @@ export interface AppState {
   workingDirectory: string;
   recentProjects: string[];
   setAndPersistDirectory: (dir: string) => Promise<void>;
+  renameProject: (dir: string, nextName: string) => Promise<void>;
+  deleteProject: (dir: string) => Promise<void>;
+  revealProject: (dir: string) => Promise<void>;
 
   baseDirectory: string | null;
   sidebarNewProjectOpen: boolean;
@@ -105,6 +108,11 @@ export function useAppState(api: NativeApi | undefined): AppState {
   const [renderProgress, setRenderProgress] = useState<RenderProgress | null>(null);
   const [renderHistory, setRenderHistory] = useState<RenderHistoryItem[]>([]);
 
+  const persistRecentProjects = useCallback((next: string[]) => {
+    localStorage.setItem(RECENT_PROJECTS_KEY, JSON.stringify(next));
+    setRecentProjects(next);
+  }, []);
+
   const detectAgents = useCallback(async () => {
     if (!api) return;
     try {
@@ -137,12 +145,11 @@ export function useAppState(api: NativeApi | undefined): AppState {
       const next = prev.includes(workingDirectory)
         ? prev
         : [...prev, workingDirectory].slice(-12);
-      localStorage.setItem(RECENT_PROJECTS_KEY, JSON.stringify(next));
-      setRecentProjects(next);
+      persistRecentProjects(next);
     } catch {
       /* ignore */
     }
-  }, [workingDirectory]);
+  }, [persistRecentProjects, workingDirectory]);
 
   // Load persisted settings on mount
   useEffect(() => {
@@ -245,6 +252,76 @@ export function useAppState(api: NativeApi | undefined): AppState {
     },
     [api]
   );
+
+  const renameProject = useCallback(async (dir: string, nextName: string) => {
+    if (!api) return;
+    const safeName = nextName.trim().replace(/[^a-zA-Z0-9_-]/g, "-");
+    if (!safeName) return;
+
+    const slashIndex = Math.max(dir.lastIndexOf("/"), dir.lastIndexOf("\\"));
+    const nextPath = slashIndex >= 0 ? `${dir.slice(0, slashIndex + 1)}${safeName}` : safeName;
+    if (nextPath === dir) return;
+
+    setError(null);
+    try {
+      const renamedPath = await api.fs.renamePath(dir, nextPath);
+      const nextProjects = recentProjects.map((projectPath) =>
+        projectPath === dir ? renamedPath : projectPath
+      );
+      persistRecentProjects(nextProjects);
+
+      if (workingDirectory === dir) {
+        setWorkingDirectory(renamedPath);
+        await api.settings.setLastOpenedDirectory(renamedPath);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to rename project.");
+    }
+  }, [api, persistRecentProjects, recentProjects, workingDirectory]);
+
+  const deleteProject = useCallback(async (dir: string) => {
+    if (!api) return;
+    setError(null);
+    try {
+      if (workingDirectory === dir) {
+        try {
+          await api.project.stopPlayer(dir);
+        } catch {
+          /* ignore */
+        }
+      }
+
+      await api.fs.removePath(dir);
+
+      const nextProjects = recentProjects.filter((projectPath) => projectPath !== dir);
+      persistRecentProjects(nextProjects);
+
+      if (workingDirectory === dir) {
+        setWorkingDirectory("");
+        setCurrentRun(null);
+        setPlayerRunning(false);
+        setPlayerUrl("");
+        setCompositions([]);
+        setSelectedComposition("");
+        setRenderProgress(null);
+        setRenderHistory([]);
+        setView("output");
+        await api.settings.setLastOpenedDirectory("");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to delete project.");
+    }
+  }, [api, persistRecentProjects, recentProjects, workingDirectory]);
+
+  const revealProject = useCallback(async (dir: string) => {
+    if (!api) return;
+    setError(null);
+    try {
+      await api.shell.revealPath(dir);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to reveal project.");
+    }
+  }, [api]);
 
   const onNewProject = useCallback(() => {
     setSidebarNewProjectOpen(true);
@@ -440,6 +517,9 @@ export function useAppState(api: NativeApi | undefined): AppState {
     workingDirectory,
     recentProjects,
     setAndPersistDirectory,
+    renameProject,
+    deleteProject,
+    revealProject,
     baseDirectory,
     sidebarNewProjectOpen,
     setSidebarNewProjectOpen,

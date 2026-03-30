@@ -129,6 +129,21 @@ function registerIpcHandlers(): void {
     return fullPath;
   });
 
+  ipcMain.handle(IPC_CHANNELS.fsRenamePath, async (_event, from: unknown, to: unknown) => {
+    if (typeof from !== "string" || !from || typeof to !== "string" || !to) {
+      throw new Error("Invalid rename paths");
+    }
+    await fs.rename(from, to);
+    return to;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.fsRemovePath, async (_event, fullPath: unknown) => {
+    if (typeof fullPath !== "string" || !fullPath) {
+      throw new Error("Invalid path");
+    }
+    await fs.rm(fullPath, { recursive: true, force: true });
+  });
+
   ipcMain.handle(IPC_CHANNELS.shellOpenPath, async (_event, filePath: unknown) => {
     if (typeof filePath !== "string" || !filePath) {
       throw new Error("Invalid file path");
@@ -137,6 +152,13 @@ function registerIpcHandlers(): void {
     if (err) {
       throw new Error(err);
     }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.shellRevealPath, async (_event, filePath: unknown) => {
+    if (typeof filePath !== "string" || !filePath) {
+      throw new Error("Invalid file path");
+    }
+    shell.showItemInFolder(filePath);
   });
 
   // ── Project handlers ──────────────────────────────────────────────
