@@ -84,14 +84,15 @@ function getAuthCodeViaBrowser(clientId: string): Promise<string> {
       resolved = true;
       clearTimeout(timeout);
 
-      // Send a user-friendly page back to the browser
+      // Redirect to snug:// deep link to bring the app to foreground,
+      // with a fallback message if the deep link doesn't trigger.
       res.writeHead(200, { "Content-Type": "text/html" });
       res.end(
-        "<html><body style='font-family:system-ui;text-align:center;padding:60px'>" +
-          "<h2>Login successful</h2>" +
-          "<p>You can close this tab and return to Snug.</p>" +
-          "<script>window.close()</script>" +
-          "</body></html>"
+        `<html><head><meta http-equiv="refresh" content="0;url=snug://auth/success"></head>` +
+          `<body style="font-family:system-ui;text-align:center;padding:60px">` +
+          `<p style="color:#888;font-size:14px">Redirecting to Snug…</p>` +
+          `<p style="margin-top:16px"><a href="snug://auth/success" style="color:#6366f1;text-decoration:none">Click here if Snug didn't open</a></p>` +
+          `</body></html>`
       );
 
       server.close();

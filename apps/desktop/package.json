@@ -41,6 +41,12 @@
     "extraMetadata": {
       "main": "dist-electron/main.js"
     },
+    "protocols": [
+      {
+        "name": "Snug",
+        "schemes": ["snug"]
+      }
+    ],
     "mac": {
       "category": "public.app-category.developer-tools",
       "target": ["dmg"],
