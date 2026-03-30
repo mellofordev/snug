@@ -1,12 +1,17 @@
+import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { sign, verify } from "hono/jwt";
+
+import { createDb } from "./db";
+import { users } from "./db/schema";
 
 /** Cloudflare Worker bindings — secrets set via `npx wrangler secret put <NAME>`. */
 export type Env = {
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET: string;
   JWT_SECRET: string;
+  DATABASE_URL: string;
 };
 
 export const app = new Hono<{ Bindings: Env }>();
@@ -29,7 +34,6 @@ app.get("/health", (c) =>
 
 /**
  * Desktop app calls this to decide if a newer build exists.
- * Wire to R2, GitHub Releases API, or static JSON later.
  */
 app.get("/updates", (c) => {
   const version = c.req.query("version") ?? "";
@@ -48,10 +52,6 @@ app.get("/updates", (c) => {
 
 // ── Auth ────────────────────────────────────────────────────────────────
 
-/**
- * Returns the Google Client ID so the desktop app can build the OAuth URL.
- * Client ID is not secret — it's embedded in the consent screen URL.
- */
 app.get("/auth/config", (c) => {
   return c.json({
     googleClientId: c.env.GOOGLE_CLIENT_ID
@@ -60,9 +60,6 @@ app.get("/auth/config", (c) => {
 
 /**
  * Exchange a Google authorization code for a Snug JWT + user profile.
- *
- * The desktop app opens a BrowserWindow with Google's consent screen,
- * intercepts the redirect to capture `code`, and POSTs it here.
  */
 app.post("/auth/google", async (c) => {
   const body = await c.req.json<{ code: string; redirectUri: string }>().catch(() => null);
@@ -106,13 +103,45 @@ app.post("/auth/google", async (c) => {
     picture: string;
   };
 
-  // Sign a Snug JWT
+  // Upsert user in database
+  const db = createDb(c.env.DATABASE_URL);
+
+  const rows = await db
+    .insert(users)
+    .values({
+      googleId: googleUser.id,
+      email: googleUser.email,
+      name: googleUser.name,
+      picture: googleUser.picture,
+    })
+    .onConflictDoUpdate({
+      target: users.googleId,
+      set: {
+        email: googleUser.email,
+        name: googleUser.name,
+        picture: googleUser.picture,
+        updatedAt: new Date(),
+      },
+    })
+    .returning({
+      id: users.id,
+      email: users.email,
+      name: users.name,
+      picture: users.picture,
+    });
+
+  const dbUser = rows[0];
+  if (!dbUser) {
+    return c.json({ error: "db_error", message: "Failed to save user" }, 500);
+  }
+
+  // Sign a Snug JWT with the DB user id
   const now = Math.floor(Date.now() / 1000);
   const payload = {
-    sub: googleUser.id,
-    email: googleUser.email,
-    name: googleUser.name,
-    picture: googleUser.picture,
+    sub: dbUser.id,
+    email: dbUser.email,
+    name: dbUser.name,
+    picture: dbUser.picture,
     iat: now,
     exp: now + 30 * 24 * 60 * 60 // 30 days
   };
@@ -122,17 +151,16 @@ app.post("/auth/google", async (c) => {
   return c.json({
     token,
     user: {
-      id: googleUser.id,
-      email: googleUser.email,
-      name: googleUser.name,
-      picture: googleUser.picture
+      id: dbUser.id,
+      email: dbUser.email,
+      name: dbUser.name,
+      picture: dbUser.picture
     }
   });
 });
 
 /**
  * Validate a Snug JWT and return the user profile.
- * Called on app launch to restore an existing session.
  */
 app.get("/auth/me", async (c) => {
   const authHeader = c.req.header("Authorization");
@@ -143,7 +171,7 @@ app.get("/auth/me", async (c) => {
   const token = authHeader.slice(7);
 
   try {
-    const payload = await verify(token, c.env.JWT_SECRET, "HS256");
+    const payload = (await verify(token, c.env.JWT_SECRET, "HS256")) as Record<string, unknown>;
     return c.json({
       user: {
         id: payload.sub as string,
