@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type {
   Agent,
   AgentId,
+  ChatMessage,
   NativeApi,
   PromptOutput,
   RenderHistoryItem,
@@ -58,10 +59,12 @@ export interface AppState {
   onChangeBaseDirectory: () => Promise<void>;
 
   currentRun: PromptOutput | null;
+  chatMessages: ChatMessage[];
   isRunning: boolean;
   error: string | null;
   onSubmit: () => Promise<void>;
   onStop: () => Promise<void>;
+  onNewSession: () => void;
 
   // Video preview state
   view: "output" | "preview";
@@ -91,6 +94,10 @@ export function useAppState(api: NativeApi | undefined): AppState {
   const [recentProjects, setRecentProjects] = useState<string[]>([]);
   const [currentRun, setCurrentRun] = useState<PromptOutput | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Session tracking per project: { projectPath → { sessionId, messages } }
+  const sessionsRef = useRef<Map<string, { sessionId: string | null; messages: ChatMessage[] }>>(new Map());
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 
   const [baseDirectory, setBaseDirectory] = useState<string | null>(null);
   const [sidebarNewProjectOpen, setSidebarNewProjectOpen] = useState(false);
@@ -171,8 +178,37 @@ export function useAppState(api: NativeApi | undefined): AppState {
   // Subscribe to prompt output stream
   useEffect(() => {
     if (!api) return;
-    return api.prompt.onOutput((output) => setCurrentRun(output));
-  }, [api]);
+    return api.prompt.onOutput((output) => {
+      setCurrentRun(output);
+
+      // Save session ID when we get it
+      if (output.sessionId && workingDirectory) {
+        const session = sessionsRef.current.get(workingDirectory);
+        sessionsRef.current.set(workingDirectory, {
+          sessionId: output.sessionId,
+          messages: session?.messages ?? []
+        });
+      }
+
+      // When run completes, merge new messages into accumulated chat
+      if (output.status === "completed" || output.status === "failed") {
+        // output.messages includes the user message + all new messages from this run
+        // Skip the first user message (we already added it in onSubmit)
+        const newMessages = output.messages.slice(1);
+        setChatMessages((prev) => {
+          const merged = [...prev, ...newMessages];
+          // Save to session ref
+          if (workingDirectory) {
+            sessionsRef.current.set(workingDirectory, {
+              sessionId: output.sessionId,
+              messages: merged
+            });
+          }
+          return merged;
+        });
+      }
+    });
+  }, [api, workingDirectory]);
 
   // Subscribe to render progress
   useEffect(() => {
@@ -247,10 +283,27 @@ export function useAppState(api: NativeApi | undefined): AppState {
 
   const setAndPersistDirectory = useCallback(
     async (dir: string) => {
+      // Save current project's chat state before switching
+      if (workingDirectory) {
+        const currentSession = sessionsRef.current.get(workingDirectory);
+        if (currentRun?.sessionId || currentSession?.sessionId) {
+          sessionsRef.current.set(workingDirectory, {
+            sessionId: currentRun?.sessionId ?? currentSession?.sessionId ?? null,
+            messages: chatMessages
+          });
+        }
+      }
+
+      // Switch to new project
       setWorkingDirectory(dir);
+      setCurrentRun(null);
       await api?.settings.setLastOpenedDirectory(dir);
+
+      // Restore chat state for the new project
+      const restored = sessionsRef.current.get(dir);
+      setChatMessages(restored?.messages ?? []);
     },
-    [api]
+    [api, workingDirectory, currentRun, chatMessages]
   );
 
   const renameProject = useCallback(async (dir: string, nextName: string) => {
@@ -456,24 +509,40 @@ export function useAppState(api: NativeApi | undefined): AppState {
   const onSubmit = useCallback(async () => {
     if (!api || !selectedAgent || !prompt.trim() || !workingDirectory) return;
     setError(null);
-    setCurrentRun(null);
     setView("output");
 
-    // Read system prompt from project
+    // Get existing session for this project
+    const session = sessionsRef.current.get(workingDirectory);
+    const sessionId = session?.sessionId ?? undefined;
+
+    // Read system prompt from project (only needed for first prompt in session)
     let systemPrompt: string | undefined;
-    try {
-      const sp = await api.project.readSystemPrompt(workingDirectory);
-      if (sp) systemPrompt = sp;
-    } catch {
-      // No system prompt is fine
+    if (!sessionId) {
+      try {
+        const sp = await api.project.readSystemPrompt(workingDirectory);
+        if (sp) systemPrompt = sp;
+      } catch {
+        // No system prompt is fine
+      }
     }
+
+    // Add user message to chat immediately
+    const userMessage: ChatMessage = {
+      role: "user",
+      content: prompt.trim(),
+      timestamp: new Date().toISOString()
+    };
+    setChatMessages((prev) => [...prev, userMessage]);
+    setCurrentRun(null);
+    setPrompt("");
 
     try {
       const output = await api.prompt.run({
         agentId: selectedAgent as AgentId,
         prompt: prompt.trim(),
         workingDirectory,
-        systemPrompt
+        systemPrompt,
+        sessionId
       });
       setCurrentRun(output);
     } catch (e) {
@@ -485,6 +554,14 @@ export function useAppState(api: NativeApi | undefined): AppState {
     if (!api || !currentRun) return;
     await api.prompt.stop(currentRun.id);
   }, [api, currentRun]);
+
+  const onNewSession = useCallback(() => {
+    if (workingDirectory) {
+      sessionsRef.current.delete(workingDirectory);
+    }
+    setChatMessages([]);
+    setCurrentRun(null);
+  }, [workingDirectory]);
 
   const triggerRender = useCallback(
     async (compositionId?: string) => {
@@ -531,9 +608,11 @@ export function useAppState(api: NativeApi | undefined): AppState {
     onCreateProject,
     onChangeBaseDirectory,
     currentRun,
+    chatMessages,
     isRunning,
     error,
     onSubmit,
+    onNewSession,
     onStop,
     // Video preview
     view,

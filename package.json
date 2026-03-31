@@ -18,5 +18,8 @@
   "devDependencies": {
     "turbo": "^2.3.3",
     "typescript": "^5.7.3"
+  },
+  "dependencies": {
+    "streamdown": "^2.5.0"
   }
 }

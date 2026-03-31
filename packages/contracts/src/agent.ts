@@ -15,7 +15,20 @@ export const promptInputSchema = z.object({
   agentId: agentIdSchema,
   prompt: z.string().trim().min(1).max(10000),
   workingDirectory: z.string().min(1),
-  systemPrompt: z.string().optional()
+  systemPrompt: z.string().optional(),
+  /** Resume an existing Claude Code session instead of starting a new one */
+  sessionId: z.string().optional()
+});
+
+/** A single block in the chat conversation. */
+export const chatMessageSchema = z.object({
+  role: z.enum(["user", "assistant", "thinking", "tool"]),
+  content: z.string(),
+  /** Tool name when role is "tool" */
+  toolName: z.string().optional(),
+  /** Tool input (JSON string) when role is "tool" */
+  toolInput: z.string().optional(),
+  timestamp: z.string().datetime()
 });
 
 export const promptOutputSchema = z.object({
@@ -24,6 +37,10 @@ export const promptOutputSchema = z.object({
   prompt: z.string(),
   status: z.enum(["running", "completed", "failed"]),
   output: z.string(),
+  /** Structured chat messages parsed from streaming output */
+  messages: z.array(chatMessageSchema),
+  /** Claude Code session ID — use to resume this session */
+  sessionId: z.string().nullable(),
   exitCode: z.number().nullable(),
   startedAt: z.string().datetime()
 });
@@ -55,6 +72,7 @@ export const renderHistoryItemSchema = z.object({
 
 export type AgentId = z.infer<typeof agentIdSchema>;
 export type Agent = z.infer<typeof agentSchema>;
+export type ChatMessage = z.infer<typeof chatMessageSchema>;
 export type PromptInput = z.infer<typeof promptInputSchema>;
 export type PromptOutput = z.infer<typeof promptOutputSchema>;
 export type CompositionMeta = z.infer<typeof compositionMetaSchema>;

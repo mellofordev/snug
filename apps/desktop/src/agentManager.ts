@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { promisify } from "node:util";
 
-import type { Agent, AgentId, PromptInput, PromptOutput } from "@acme/contracts";
+import type { Agent, AgentId, ChatMessage, PromptInput, PromptOutput } from "@acme/contracts";
 
 const execFileAsync = promisify(execFile);
 
@@ -65,6 +65,130 @@ export async function detectAgents(): Promise<Agent[]> {
 
 const runningProcesses = new Map<string, ChildProcess>();
 
+// ── Stream JSON parser ──────────────────────────────────────────────────
+
+/**
+ * Parse Claude CLI `--output-format stream-json` events into ChatMessage array.
+ *
+ * Each line is a complete JSON object. The CLI emits these event types:
+ *   - { type: "system", subtype: "init", ... }
+ *   - { type: "assistant", message: { content: [{ type: "text"|"tool_use"|"thinking", ... }] } }
+ *   - { type: "user", message: { content: [{ type: "tool_result", ... }] } }
+ *   - { type: "result", subtype: "success", result: "..." }
+ *
+ * Each "assistant" event contains already-complete content blocks (not deltas).
+ */
+class StreamParser {
+  messages: ChatMessage[] = [];
+  sessionId: string | null = null;
+
+  processLine(line: string): void {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+
+    let event: Record<string, unknown>;
+    try {
+      event = JSON.parse(trimmed) as Record<string, unknown>;
+    } catch {
+      return;
+    }
+
+    const type = event.type as string | undefined;
+    if (!type) return;
+
+    const now = new Date().toISOString();
+
+    switch (type) {
+      case "system": {
+        const sessionId = event.session_id as string | undefined;
+        if (sessionId) {
+          this.sessionId = sessionId;
+        }
+        break;
+      }
+
+      case "assistant": {
+        const message = event.message as Record<string, unknown> | undefined;
+        if (!message) break;
+
+        const content = message.content as Array<Record<string, unknown>> | undefined;
+        if (!content) break;
+
+        for (const block of content) {
+          const blockType = block.type as string;
+
+          if (blockType === "thinking") {
+            const thinking = (block.thinking as string) ?? "";
+            if (thinking.trim()) {
+              this.messages.push({ role: "thinking", content: thinking, timestamp: now });
+            }
+          } else if (blockType === "text") {
+            const text = (block.text as string) ?? "";
+            if (text.trim()) {
+              this.messages.push({ role: "assistant", content: text, timestamp: now });
+            }
+          } else if (blockType === "tool_use") {
+            const toolName = (block.name as string) ?? "Tool";
+            const toolInput = block.input ? JSON.stringify(block.input, null, 2) : "";
+            this.messages.push({
+              role: "tool",
+              content: "",
+              toolName,
+              toolInput,
+              timestamp: now
+            });
+          }
+        }
+        break;
+      }
+
+      case "user": {
+        // Tool results from the CLI — show as tool response
+        const message = event.message as Record<string, unknown> | undefined;
+        if (!message) break;
+
+        const content = message.content as Array<Record<string, unknown>> | undefined;
+        if (!content) break;
+
+        for (const block of content) {
+          const blockType = block.type as string;
+          if (blockType === "tool_result") {
+            const resultContent = (block.content as string) ?? "";
+            const toolUseId = (block.tool_use_id as string) ?? "";
+            // Find the matching tool call to get the name
+            const matchingTool = [...this.messages].reverse().find(
+              (m) => m.role === "tool" && !m.content
+            );
+            if (resultContent.trim()) {
+              this.messages.push({
+                role: "tool",
+                content: resultContent,
+                toolName: matchingTool?.toolName ?? "Result",
+                timestamp: now
+              });
+            }
+          }
+        }
+        break;
+      }
+
+      case "result": {
+        const result = (event.result as string) ?? "";
+        if (result.trim()) {
+          // Check if this result text is already in the last assistant message
+          const lastAssistant = [...this.messages].reverse().find((m) => m.role === "assistant");
+          if (!lastAssistant || lastAssistant.content !== result) {
+            this.messages.push({ role: "assistant", content: result, timestamp: now });
+          }
+        }
+        break;
+      }
+    }
+  }
+}
+
+// ── Prompt execution ────────────────────────────────────────────────────
+
 export function runPrompt(
   input: PromptInput,
   onUpdate: (output: PromptOutput) => void
@@ -78,6 +202,10 @@ export function runPrompt(
     prompt: input.prompt,
     status: "running",
     output: "",
+    messages: [
+      { role: "user", content: input.prompt, timestamp: startedAt }
+    ],
+    sessionId: input.sessionId ?? null,
     exitCode: null,
     startedAt
   };
@@ -86,7 +214,10 @@ export function runPrompt(
 
   // Use cached full path if available, otherwise fall back to command name
   const binary = resolvedPaths.get(input.agentId) ?? AGENT_COMMANDS[input.agentId].command;
-  const args = buildArgs(input.agentId, input.systemPrompt);
+  const args = buildArgs(input.agentId, input.systemPrompt, input.sessionId);
+
+  console.log(`[agent] spawning: ${binary} ${args.join(" ")}`);
+  console.log(`[agent] cwd: ${input.workingDirectory}`);
 
   const child = spawn(binary, args, {
     cwd: input.workingDirectory,
@@ -102,18 +233,63 @@ export function runPrompt(
     child.stdin.end();
   }
 
+  const parser = new StreamParser();
+  let stdoutBuffer = "";
+
   child.stdout?.on("data", (chunk: Buffer) => {
-    output.output += chunk.toString();
+    const text = chunk.toString();
+    output.output += text;
+    stdoutBuffer += text;
+
+    // Process complete lines
+    const lines = stdoutBuffer.split("\n");
+    // Keep the last incomplete line in the buffer
+    stdoutBuffer = lines.pop() ?? "";
+
+    for (const line of lines) {
+      parser.processLine(line);
+    }
+
+    // Update session ID if captured
+    if (parser.sessionId) {
+      output.sessionId = parser.sessionId;
+    }
+
+    // Always keep user message first
+    output.messages = [
+      { role: "user", content: input.prompt, timestamp: startedAt },
+      ...parser.messages
+    ];
+
     onUpdate({ ...output });
   });
 
   child.stderr?.on("data", (chunk: Buffer) => {
-    output.output += chunk.toString();
+    const text = chunk.toString();
+    console.error(`[agent:stderr] ${text}`);
+    output.output += text;
     onUpdate({ ...output });
   });
 
   child.on("close", (code, signal) => {
     runningProcesses.delete(id);
+    console.log(`[agent] process closed — code=${code} signal=${signal} session=${parser.sessionId}`);
+    console.log(`[agent] parsed messages: ${parser.messages.length}`);
+
+    // Process any remaining buffer
+    if (stdoutBuffer.trim()) {
+      parser.processLine(stdoutBuffer);
+    }
+
+    if (parser.sessionId) {
+      output.sessionId = parser.sessionId;
+    }
+
+    output.messages = [
+      { role: "user", content: input.prompt, timestamp: startedAt },
+      ...parser.messages
+    ];
+
     output.exitCode = code ?? (signal ? 1 : 0);
     output.status = code === 0 ? "completed" : "failed";
     onUpdate({ ...output });
@@ -121,6 +297,7 @@ export function runPrompt(
 
   child.on("error", (err) => {
     runningProcesses.delete(id);
+    console.error(`[agent] spawn error:`, err);
     output.output += `\nError: ${err.message}`;
     output.exitCode = 1;
     output.status = "failed";
@@ -130,10 +307,13 @@ export function runPrompt(
   return output;
 }
 
-function buildArgs(agentId: AgentId, systemPrompt?: string): string[] {
+function buildArgs(agentId: AgentId, systemPrompt?: string, sessionId?: string): string[] {
   switch (agentId) {
     case "claude-code": {
-      const args = ["-p", "--dangerously-skip-permissions"];
+      const args = ["-p", "--dangerously-skip-permissions", "--output-format", "stream-json", "--verbose"];
+      if (sessionId) {
+        args.push("--resume", sessionId);
+      }
       if (systemPrompt) {
         args.push("--system-prompt", systemPrompt);
       }

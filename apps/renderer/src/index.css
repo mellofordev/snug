@@ -2,6 +2,7 @@
 @import "tailwindcss";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
+@import "streamdown/styles.css";
 
 @source "../node_modules/@base-ui/react";
 

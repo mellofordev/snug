@@ -2,8 +2,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 
 import { Composer } from "@/components/composer";
-import { Onboarding } from "@/components/onboarding";
-import { OutputViewer } from "@/components/output-viewer";
+import { Onboarding } from "@/components/onboarding/index";
+import { ChatViewer } from "@/components/chat-viewer";
 import { SidePanel } from "@/components/side-panel";
 import { TopBar } from "@/components/top-bar";
 import { VideoPreview } from "@/components/video-preview";
@@ -39,13 +39,21 @@ export default function App() {
     );
   }
 
-  // Onboarding gate
-  if (!auth.user) {
+  // Onboarding gate: show if not logged in OR no projects yet
+  if (!auth.user || state.recentProjects.length === 0) {
     return (
       <Onboarding
-        loading={auth.loading}
-        error={auth.error}
+        user={auth.user}
+        authLoading={auth.loading}
+        authError={auth.error}
         onLogin={() => void auth.login()}
+        baseDirectory={state.baseDirectory}
+        projectName={state.newProjectName}
+        creating={state.creatingProject}
+        createStage={state.createStage}
+        onSetName={state.setNewProjectName}
+        onChangeBase={() => void state.onChangeBaseDirectory()}
+        onCreate={() => void state.onCreateProject()}
       />
     );
   }
@@ -103,7 +111,7 @@ export default function App() {
                 onBack={state.switchToOutput}
               />
             ) : (
-              <OutputViewer currentRun={state.currentRun} isRunning={state.isRunning} />
+              <ChatViewer currentRun={state.currentRun} chatMessages={state.chatMessages} isRunning={state.isRunning} />
             )}
 
             <Composer

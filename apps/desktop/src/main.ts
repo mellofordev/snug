@@ -239,6 +239,20 @@ async function bootstrap(): Promise<void> {
 
 app.setName("Snug");
 
+// Register snug:// deep link protocol (for dev; packaged apps use Info.plist via electron-builder)
+if (!app.isPackaged) {
+  app.setAsDefaultProtocolClient("snug");
+}
+
+// macOS: handle snug:// deep link — bring window to front
+app.on("open-url", (event, _url) => {
+  event.preventDefault();
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
+});
+
 app.whenReady().then(() => {
   if (process.platform === "darwin" && app.dock) {
     app.dock.setIcon(nativeImage.createFromPath(iconPath));

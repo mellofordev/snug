@@ -12,6 +12,11 @@
  * Run from repo root after `bun run build`:
  *   node scripts/build-desktop-dmg.mjs
  *
+ * Code signing: install your Developer ID Application .cer (Keychain) so it pairs with the
+ * private key from your CSR. By default electron-builder auto-discovers the identity. To force
+ * an unsigned DMG (e.g. CI without certs), set SNUG_NO_CODESIGN=1.
+ * Optional: CSC_NAME="Developer ID Application: Your Name (TEAMID)" if you have several identities.
+ *
  * Set SNUG_KEEP_PACK_STAGE=1 to leave the temp stage on disk for debugging.
  */
 import { spawnSync } from "node:child_process";
@@ -146,7 +151,10 @@ try {
   console.log("[snug pack] Stage:", stageRoot);
   run("bun", ["install", "--production"], { cwd: stageRoot });
 
-  const env = { ...process.env, CSC_IDENTITY_AUTO_DISCOVERY: "false" };
+  const env = { ...process.env };
+  if (process.env.SNUG_NO_CODESIGN === "1") {
+    env.CSC_IDENTITY_AUTO_DISCOVERY = "false";
+  }
   run("bunx", ["electron-builder", "--mac", "dmg", "--publish", "never"], { cwd: stageRoot, env });
 
   const stageDist = path.join(stageRoot, "dist");
