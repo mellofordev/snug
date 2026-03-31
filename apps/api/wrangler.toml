@@ -3,7 +3,7 @@
 name = "snug-api"
 main = "src/index.ts"
 compatibility_date = "2025-03-01"
-node_compat = true
+nodejs_compat = true
 
 # Required secrets (set via: npx wrangler secret put <NAME>):
 #   GOOGLE_CLIENT_ID
