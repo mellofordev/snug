@@ -24,5 +24,9 @@ export const IPC_CHANNELS = {
   projectReadSystemPrompt: "project:read-system-prompt",
   authLogin: "auth:login",
   authGetSession: "auth:get-session",
-  authLogout: "auth:logout"
+  authLogout: "auth:logout",
+  appCheckUpdate: "app:check-update",
+  appDownloadUpdate: "app:download-update",
+  appInstallUpdate: "app:install-update",
+  appUpdateStatus: "app:update-status"
 } as const;

@@ -13,7 +13,9 @@
     "lint": "turbo run lint",
     "build:contracts": "bun run --cwd packages/contracts build",
     "dist:mac": "bun run build && node scripts/build-desktop-dmg.mjs",
-    "dev:api": "bun run --cwd apps/api dev"
+    "dist:mac:production": "node scripts/assert-production-mac.mjs && bun run dist:mac",
+    "dev:api": "bun run --cwd apps/api dev",
+    "release": "node scripts/release.mjs"
   },
   "devDependencies": {
     "turbo": "^2.3.3",

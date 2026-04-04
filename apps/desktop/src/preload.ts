@@ -64,6 +64,20 @@ const nativeApi: NativeApi = {
     login: () => ipcRenderer.invoke(IPC_CHANNELS.authLogin),
     getSession: () => ipcRenderer.invoke(IPC_CHANNELS.authGetSession),
     logout: () => ipcRenderer.invoke(IPC_CHANNELS.authLogout)
+  },
+  app: {
+    checkUpdate: () => ipcRenderer.invoke(IPC_CHANNELS.appCheckUpdate),
+    downloadUpdate: () => ipcRenderer.invoke(IPC_CHANNELS.appDownloadUpdate),
+    installUpdate: () => ipcRenderer.invoke(IPC_CHANNELS.appInstallUpdate),
+    onUpdateStatus: (callback) => {
+      const handler = (_event: Electron.IpcRendererEvent, status: unknown) => {
+        callback(status as Parameters<typeof callback>[0]);
+      };
+      ipcRenderer.on(IPC_CHANNELS.appUpdateStatus, handler);
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.appUpdateStatus, handler);
+      };
+    }
   }
 };
 
