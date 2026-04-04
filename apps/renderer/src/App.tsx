@@ -8,6 +8,7 @@ import { SidePanel } from "@/components/side-panel";
 import { TopBar } from "@/components/top-bar";
 import { VideoPreview } from "@/components/video-preview";
 import { useAppState } from "@/hooks/use-app-state";
+import { useAppUpdateToasts } from "@/hooks/use-app-update-toasts";
 import { useAuth } from "@/hooks/use-auth";
 import { useNativeApi } from "@/hooks/use-native-api";
 
@@ -15,6 +16,7 @@ export default function App() {
   const api = useNativeApi();
   const auth = useAuth(api);
   const state = useAppState(api);
+  useAppUpdateToasts(api, state.updateStatus, state.dismissUpdate);
 
   if (!api) {
     return (
@@ -30,31 +32,37 @@ export default function App() {
   // Auth loading state
   if (auth.loading && !auth.user) {
     return (
-      <main className="flex h-screen items-center justify-center bg-background text-foreground">
-        <div className="flex flex-col items-center gap-3">
-          <span className="size-2 animate-pulse rounded-full bg-muted-foreground" />
-          <p className="text-sm text-muted-foreground">Loading…</p>
-        </div>
-      </main>
+      <>
+        <main className="flex h-screen items-center justify-center bg-background text-foreground">
+          <div className="flex flex-col items-center gap-3">
+            <span className="size-2 animate-pulse rounded-full bg-muted-foreground" />
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          </div>
+        </main>
+        <Toaster />
+      </>
     );
   }
 
   // Onboarding gate: show if not logged in OR no projects yet
   if (!auth.user || state.recentProjects.length === 0) {
     return (
-      <Onboarding
-        user={auth.user}
-        authLoading={auth.loading}
-        authError={auth.error}
-        onLogin={() => void auth.login()}
-        baseDirectory={state.baseDirectory}
-        projectName={state.newProjectName}
-        creating={state.creatingProject}
-        createStage={state.createStage}
-        onSetName={state.setNewProjectName}
-        onChangeBase={() => void state.onChangeBaseDirectory()}
-        onCreate={() => void state.onCreateProject()}
-      />
+      <>
+        <Onboarding
+          user={auth.user}
+          authLoading={auth.loading}
+          authError={auth.error}
+          onLogin={() => void auth.login()}
+          baseDirectory={state.baseDirectory}
+          projectName={state.newProjectName}
+          creating={state.creatingProject}
+          createStage={state.createStage}
+          onSetName={state.setNewProjectName}
+          onChangeBase={() => void state.onChangeBaseDirectory()}
+          onCreate={() => void state.onCreateProject()}
+        />
+        <Toaster />
+      </>
     );
   }
 

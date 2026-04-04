@@ -18,6 +18,7 @@ import {
   readSystemPrompt
 } from "./projectManager";
 import { SettingsStore } from "./settingsStore";
+import { initAutoUpdater, checkForUpdate, downloadUpdate, installUpdate } from "./updateManager";
 
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
 const apiBaseUrl = process.env.SNUG_API_URL
@@ -57,7 +58,12 @@ function createWindow(): BrowserWindow {
     }
   });
 
-  window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith("https://cdn.snug.video/") || url.startsWith("https://github.com/")) {
+      void shell.openExternal(url);
+    }
+    return { action: "deny" };
+  });
 
   window.once("ready-to-show", () => {
     window.show();
@@ -221,6 +227,20 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.authLogout, async () => {
     return logout(settingsStore);
   });
+
+  // ── App / Update handlers ────────────────────────────────────────────
+
+  ipcMain.handle(IPC_CHANNELS.appCheckUpdate, () => {
+    checkForUpdate();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.appDownloadUpdate, () => {
+    downloadUpdate();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.appInstallUpdate, () => {
+    installUpdate();
+  });
 }
 
 async function bootstrap(): Promise<void> {
@@ -229,6 +249,14 @@ async function bootstrap(): Promise<void> {
 
   registerIpcHandlers();
   mainWindow = createWindow();
+
+  // Auto-update (only in packaged builds)
+  if (app.isPackaged) {
+    initAutoUpdater(() => mainWindow);
+    // Initial check after 5s, then every 4 hours
+    setTimeout(() => checkForUpdate(), 5_000);
+    setInterval(() => checkForUpdate(), 4 * 60 * 60 * 1_000);
+  }
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {

@@ -7,7 +7,8 @@ import type {
   NativeApi,
   PromptOutput,
   RenderHistoryItem,
-  RenderProgress
+  RenderProgress,
+  UpdateStatus
 } from "@acme/contracts";
 
 const RECENT_PROJECTS_KEY = "snug:recent-projects";
@@ -66,6 +67,9 @@ export interface AppState {
   onStop: () => Promise<void>;
   onNewSession: () => void;
 
+  updateStatus: UpdateStatus | null;
+  dismissUpdate: () => void;
+
   // Video preview state
   view: "output" | "preview";
   playerUrl: string;
@@ -98,6 +102,8 @@ export function useAppState(api: NativeApi | undefined): AppState {
   // Session tracking per project: { projectPath → { sessionId, messages } }
   const sessionsRef = useRef<Map<string, { sessionId: string | null; messages: ChatMessage[] }>>(new Map());
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
 
   const [baseDirectory, setBaseDirectory] = useState<string | null>(null);
   const [sidebarNewProjectOpen, setSidebarNewProjectOpen] = useState(false);
@@ -221,6 +227,14 @@ export function useAppState(api: NativeApi | undefined): AppState {
       }
     });
   }, [api, workingDirectory]);
+
+  // Subscribe to update status
+  useEffect(() => {
+    if (!api) return;
+    return api.app.onUpdateStatus((status) => {
+      setUpdateStatus(status);
+    });
+  }, [api]);
 
   // Merge composition metadata from the Remotion player (fps, duration, etc.)
   useEffect(() => {
@@ -563,6 +577,10 @@ export function useAppState(api: NativeApi | undefined): AppState {
     setCurrentRun(null);
   }, [workingDirectory]);
 
+  const dismissUpdate = useCallback(() => {
+    setUpdateStatus(null);
+  }, []);
+
   const triggerRender = useCallback(
     async (compositionId?: string) => {
       const id = compositionId ?? selectedComposition;
@@ -614,6 +632,8 @@ export function useAppState(api: NativeApi | undefined): AppState {
     onSubmit,
     onNewSession,
     onStop,
+    updateStatus,
+    dismissUpdate,
     // Video preview
     view,
     playerUrl,

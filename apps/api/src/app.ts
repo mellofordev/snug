@@ -32,24 +32,6 @@ app.get("/health", (c) =>
   })
 );
 
-/**
- * Desktop app calls this to decide if a newer build exists.
- */
-app.get("/updates", (c) => {
-  const version = c.req.query("version") ?? "";
-  const platform = c.req.query("platform") ?? "";
-  const arch = c.req.query("arch") ?? "";
-  const channel = c.req.query("channel") ?? "stable";
-
-  return c.json({
-    updateAvailable: false,
-    latestVersion: null as string | null,
-    url: null as string | null,
-    notes: null as string | null,
-    meta: { version, platform, arch, channel }
-  });
-});
-
 // ── Auth ────────────────────────────────────────────────────────────────
 
 app.get("/auth/config", (c) => {
