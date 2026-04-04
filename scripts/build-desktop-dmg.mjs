@@ -1,7 +1,5 @@
 #!/usr/bin/env node
 /**
- * macOS DMG build — staging model inspired by T3 Code.
- *
  * Pipeline:
  *   1. Stage temp dir with vendored workspace deps
  *   2. electron-builder signs the .app (notarize: false — @electron/notarize hangs on local builds)
