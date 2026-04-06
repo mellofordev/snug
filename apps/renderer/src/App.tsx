@@ -8,7 +8,6 @@ import { SidePanel } from "@/components/side-panel";
 import { TopBar } from "@/components/top-bar";
 import { VideoPreview } from "@/components/video-preview";
 import { useAppState } from "@/hooks/use-app-state";
-import { useAppUpdateToasts } from "@/hooks/use-app-update-toasts";
 import { useAuth } from "@/hooks/use-auth";
 import { useNativeApi } from "@/hooks/use-native-api";
 
@@ -16,8 +15,6 @@ export default function App() {
   const api = useNativeApi();
   const auth = useAuth(api);
   const state = useAppState(api);
-  useAppUpdateToasts(api, state.updateStatus, state.dismissUpdate);
-
   if (!api) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-background px-8 text-foreground">
@@ -71,6 +68,7 @@ export default function App() {
       <>
         <main className="flex h-screen bg-background text-foreground">
           <SidePanel
+            api={api}
             user={auth.user}
             recentProjects={state.recentProjects}
             workingDirectory={state.workingDirectory}
@@ -90,6 +88,8 @@ export default function App() {
             onChangeBaseDirectory={() => void state.onChangeBaseDirectory()}
             onSetNewProjectName={state.setNewProjectName}
             onCloseSidebarNewProject={() => state.setSidebarNewProjectOpen(false)}
+            updateStatus={state.updateStatus}
+            onDismissUpdate={state.dismissUpdate}
             onLogout={() => void auth.logout()}
           />
 

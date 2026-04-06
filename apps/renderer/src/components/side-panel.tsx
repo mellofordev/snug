@@ -1,7 +1,7 @@
 import * as React from "react";
 
-import type { PromptOutput, User } from "@acme/contracts";
-import { Add01Icon, ComputerIcon, Delete02Icon, Edit02Icon, FolderOpenIcon, FolderViewIcon, LogoutIcon, MenuIcon, Moon02Icon, SettingsIcon, SunIcon, UserIcon } from "@hugeicons/core-free-icons";
+import type { NativeApi, PromptOutput, UpdateStatus, User } from "@acme/contracts";
+import { Add01Icon, ArrowReloadHorizontalIcon, ComputerIcon, Delete02Icon, Download04Icon, Edit02Icon, FolderOpenIcon, FolderViewIcon, LogoutIcon, MenuIcon, Moon02Icon, SettingsIcon, SunIcon, UserIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 
 import { Badge } from "@/components/ui/badge";
@@ -52,6 +52,7 @@ function projectLabel(fullPath: string) {
 }
 
 interface SidePanelProps {
+  api: NativeApi;
   user: User;
   recentProjects: string[];
   workingDirectory: string;
@@ -62,6 +63,8 @@ interface SidePanelProps {
   newProjectName: string;
   creatingProject: boolean;
   createStage: "scaffold" | "install" | "player" | null;
+  updateStatus: UpdateStatus | null;
+  onDismissUpdate: () => void;
   onSelectProject: (path: string) => void;
   onRenameProject: (path: string, nextName: string) => void;
   onDeleteProject: (path: string) => void;
@@ -75,6 +78,7 @@ interface SidePanelProps {
 }
 
 export function SidePanel({
+  api,
   user,
   recentProjects,
   workingDirectory,
@@ -85,6 +89,8 @@ export function SidePanel({
   newProjectName,
   creatingProject,
   createStage,
+  updateStatus,
+  onDismissUpdate,
   onSelectProject,
   onRenameProject,
   onDeleteProject,
@@ -264,7 +270,8 @@ export function SidePanel({
           </SidebarGroup>
         </SidebarContent>
 
-        <SidebarFooter className="pb-3">
+        <SidebarFooter className="gap-2 pb-3">
+          <UpdateBanner status={updateStatus} onDismiss={onDismissUpdate} onInstall={() => void api.app.installUpdate()} />
           <NewProjectDialog
             open={sidebarNewProjectOpen}
             baseDirectory={baseDirectory}
@@ -512,5 +519,60 @@ function DeleteProjectDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ── Inline update banner (replaces toast) ──────────────────────────────
+
+interface UpdateBannerProps {
+  status: UpdateStatus | null;
+  onDismiss: () => void;
+  onInstall: () => void;
+}
+
+function UpdateBanner({ status, onDismiss, onInstall }: UpdateBannerProps) {
+  if (!status || status.state === "checking" || status.state === "not-available") {
+    return null;
+  }
+
+  if (status.state === "error") {
+    return (
+      <div className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+        <span className="flex-1 truncate">Update failed</span>
+        <button type="button" onClick={onDismiss} className="shrink-0 text-[10px] text-destructive/70 hover:text-destructive">
+          Dismiss
+        </button>
+      </div>
+    );
+  }
+
+  if (status.state === "downloaded") {
+    return (
+      <button
+        type="button"
+        onClick={onInstall}
+        className="group flex w-full items-center gap-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-primary transition-colors hover:bg-primary/10"
+      >
+        <HugeiconsIcon icon={ArrowReloadHorizontalIcon} size={14} className="shrink-0" />
+        <span className="flex-1 text-left">
+          Snug {status.info.version} ready — <span className="font-medium">restart to update</span>
+        </span>
+      </button>
+    );
+  }
+
+  // "available" or "downloading"
+  const pct = status.state === "downloading" ? Math.round(status.progress.percent) : null;
+
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+      <HugeiconsIcon icon={Download04Icon} size={14} className="shrink-0 animate-pulse" />
+      <span className="flex-1 truncate">
+        {pct !== null ? `Downloading update… ${pct}%` : `Downloading ${status.state === "available" ? `v${status.info.version}` : "update"}…`}
+      </span>
+      <button type="button" onClick={onDismiss} className="shrink-0 text-[10px] text-muted-foreground/70 hover:text-foreground">
+        ✕
+      </button>
+    </div>
   );
 }
