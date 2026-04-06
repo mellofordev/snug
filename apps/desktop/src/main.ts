@@ -35,6 +35,18 @@ function rendererIndexPath(): string {
 
 let mainWindow: BrowserWindow | null = null;
 let settingsStore: SettingsStore;
+/** macOS may emit open-url before ready; flush after the main window exists */
+let pendingSnugDeeplink: string | null = null;
+
+function focusSnugWindow(): void {
+  if (!mainWindow) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+  if (process.platform === "darwin") {
+    app.focus({ steal: true });
+  }
+}
 
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
@@ -217,7 +229,7 @@ function registerIpcHandlers(): void {
   // ── Auth handlers ─────────────────────────────────────────────────
 
   ipcMain.handle(IPC_CHANNELS.authLogin, async () => {
-    return loginWithGoogle(apiBaseUrl, settingsStore);
+    return loginWithGoogle(apiBaseUrl, settingsStore, mainWindow);
   });
 
   ipcMain.handle(IPC_CHANNELS.authGetSession, async () => {
@@ -244,11 +256,21 @@ function registerIpcHandlers(): void {
 }
 
 async function bootstrap(): Promise<void> {
+  const argvDeeplink = process.argv.find((a) => a.startsWith("snug:"));
+  if (argvDeeplink && !pendingSnugDeeplink) {
+    pendingSnugDeeplink = argvDeeplink;
+  }
+
   settingsStore = new SettingsStore(path.join(app.getPath("userData"), "settings.json"));
   await settingsStore.init();
 
   registerIpcHandlers();
   mainWindow = createWindow();
+
+  if (pendingSnugDeeplink) {
+    pendingSnugDeeplink = null;
+    focusSnugWindow();
+  }
 
   // Auto-update (only in packaged builds)
   if (app.isPackaged) {
@@ -267,34 +289,49 @@ async function bootstrap(): Promise<void> {
 
 app.setName("Snug");
 
-// Register snug:// deep link protocol (for dev; packaged apps use Info.plist via electron-builder)
-if (!app.isPackaged) {
-  app.setAsDefaultProtocolClient("snug");
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    focusSnugWindow();
+  });
+
+  // Register as the snug:// handler only in the packaged app. In dev, setAsDefaultProtocolClient
+  // would bind the generic "Electron" app and steal OAuth/deeplink opens from the installed Snug.app.
+  if (app.isPackaged) {
+    app.setAsDefaultProtocolClient("snug");
+  }
+
+  if (process.platform === "darwin") {
+    app.on("open-url", (event, url) => {
+      event.preventDefault();
+      if (!url.startsWith("snug:")) return;
+      if (app.isReady() && mainWindow) {
+        focusSnugWindow();
+      } else {
+        pendingSnugDeeplink = url;
+      }
+    });
+  }
+
+  // OAuth uses http://127.0.0.1 — snug:// is optional (marketing links, future flows).
+
+  app.whenReady().then(() => {
+    if (process.platform === "darwin" && app.dock) {
+      app.dock.setIcon(nativeImage.createFromPath(iconPath));
+    }
+    void bootstrap();
+  });
+
+  app.on("before-quit", () => {
+    stopAllPlayers();
+  });
+
+  app.on("window-all-closed", () => {
+    stopAllPlayers();
+    if (process.platform !== "darwin") {
+      app.quit();
+    }
+  });
 }
-
-// macOS: handle snug:// deep link — bring window to front
-app.on("open-url", (event, _url) => {
-  event.preventDefault();
-  if (mainWindow) {
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.focus();
-  }
-});
-
-app.whenReady().then(() => {
-  if (process.platform === "darwin" && app.dock) {
-    app.dock.setIcon(nativeImage.createFromPath(iconPath));
-  }
-  void bootstrap();
-});
-
-app.on("before-quit", () => {
-  stopAllPlayers();
-});
-
-app.on("window-all-closed", () => {
-  stopAllPlayers();
-  if (process.platform !== "darwin") {
-    app.quit();
-  }
-});

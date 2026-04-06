@@ -1,5 +1,5 @@
 import http from "node:http";
-import { shell } from "electron";
+import { app, BrowserWindow, shell } from "electron";
 
 import type { User } from "@acme/contracts";
 
@@ -7,13 +7,15 @@ import type { SettingsStore } from "./settingsStore";
 
 /** Port for the ephemeral local callback server. */
 const CALLBACK_PORT = 18329;
+/** Must match "Authorized redirect URIs" in Google Cloud Console (not snug://). */
 const REDIRECT_URI = `http://127.0.0.1:${CALLBACK_PORT}/oauth/callback`;
 
 // ── Google OAuth via System Browser ─────────────────────────────────────
 
 export async function loginWithGoogle(
   apiBaseUrl: string,
-  settingsStore: SettingsStore
+  settingsStore: SettingsStore,
+  focusWindow?: BrowserWindow | null
 ): Promise<User> {
   // Fetch Google Client ID from the API
   const configRes = await fetch(`${apiBaseUrl}/auth/config`);
@@ -27,7 +29,7 @@ export async function loginWithGoogle(
   }
 
   // Get auth code via system browser + local callback server
-  const code = await getAuthCodeViaBrowser(googleClientId);
+  const code = await getAuthCodeViaBrowser(googleClientId, focusWindow);
 
   // Exchange code for token via our API
   const tokenRes = await fetch(`${apiBaseUrl}/auth/google`, {
@@ -53,7 +55,7 @@ export async function loginWithGoogle(
  * Opens Google consent in the system browser and spins up a short-lived
  * local HTTP server to receive the redirect with the authorization code.
  */
-function getAuthCodeViaBrowser(clientId: string): Promise<string> {
+function getAuthCodeViaBrowser(clientId: string, focusWindow?: BrowserWindow | null): Promise<string> {
   return new Promise((resolve, reject) => {
     let resolved = false;
     const timeout = setTimeout(() => {
@@ -84,16 +86,25 @@ function getAuthCodeViaBrowser(clientId: string): Promise<string> {
       resolved = true;
       clearTimeout(timeout);
 
-      // Redirect to snug:// deep link to bring the app to foreground,
-      // with a fallback message if the deep link doesn't trigger.
+      // Show a simple success message and bring the Electron window to front directly
+      // (avoids reliance on snug:// deep link which can open the wrong binary in dev)
       res.writeHead(200, { "Content-Type": "text/html" });
       res.end(
-        `<html><head><meta http-equiv="refresh" content="0;url=snug://auth/success"></head>` +
-          `<body style="font-family:system-ui;text-align:center;padding:60px">` +
-          `<p style="color:#888;font-size:14px">Redirecting to Snug…</p>` +
-          `<p style="margin-top:16px"><a href="snug://auth/success" style="color:#6366f1;text-decoration:none">Click here if Snug didn't open</a></p>` +
+        `<html><body style="font-family:system-ui;text-align:center;padding:60px">` +
+          `<p style="font-size:18px;color:#333">Sign-in successful!</p>` +
+          `<p style="color:#888;font-size:14px;margin-top:12px">You can close this tab and return to Snug.</p>` +
           `</body></html>`
       );
+
+      // Bring Snug to the foreground (localhost callback avoids snug:// opening the wrong handler)
+      if (focusWindow) {
+        if (focusWindow.isMinimized()) focusWindow.restore();
+        focusWindow.show();
+        focusWindow.focus();
+        if (process.platform === "darwin") {
+          app.focus({ steal: true });
+        }
+      }
 
       server.close();
 
