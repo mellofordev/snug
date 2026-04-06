@@ -422,7 +422,7 @@ function NewProjectDialog({
             </p>
           )}
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={onClose} disabled={creating}>Cancel</Button>
+            <Button variant="ghost" onClick={onClose} disabled={creating}>Cancel</Button>
             <Button
               disabled={!projectName.trim() || !baseDirectory || creating}
               onClick={onCreate}
