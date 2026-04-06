@@ -45,6 +45,7 @@ import {
   SidebarMenuItem,
   SidebarProvider,
 } from "@/components/ui/sidebar";
+import { Label } from "@/components/ui/label";
 
 function projectLabel(fullPath: string) {
   const parts = fullPath.split(/[/\\]/u).filter(Boolean);
@@ -373,15 +374,12 @@ function NewProjectDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Create new project</DialogTitle>
-          <DialogDescription>
-            Choose a name for your Remotion project folder.
-          </DialogDescription>
         </DialogHeader>
 
         {baseDirectory ? (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="shrink-0">Location:</span>
-            <span className="min-w-0 truncate font-mono">{baseDirectory}</span>
+            <span className="shrink-0"><HugeiconsIcon icon={FolderOpenIcon} size={14} strokeWidth={2} className="shrink-0" /></span>
+            <span className="min-w-0 truncate">{baseDirectory}</span>
             <Button
               variant="link"
               size="xs"
@@ -401,21 +399,16 @@ function NewProjectDialog({
             </Button>
           </div>
         )}
-
+        <div className="flex flex-col gap-2">
+        <Label className="text-xs font-normal">Choose a name for your project folder</Label>
         <Input
           value={projectName}
           onChange={(e) => onSetName(e.target.value)}
-          placeholder="my-video-project"
+          placeholder="Project name"
           onKeyDown={(e) => { if (e.key === "Enter" && baseDirectory) onCreate(); }}
           autoFocus
         />
-
-        {projectName.trim() && baseDirectory && (
-          <p className="font-mono text-xs text-muted-foreground">
-            {baseDirectory}/{projectName.trim().replace(/[^a-zA-Z0-9_-]/g, "-")}
-          </p>
-        )}
-
+        </div>
         <DialogFooter className="flex-col items-stretch gap-2 sm:flex-col">
           {createStage && (
             <p className="flex items-center gap-2 text-xs text-muted-foreground">

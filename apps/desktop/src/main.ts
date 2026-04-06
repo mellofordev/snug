@@ -39,7 +39,7 @@ let settingsStore: SettingsStore;
 let pendingSnugDeeplink: string | null = null;
 
 function focusSnugWindow(): void {
-  if (!mainWindow) return;
+  if (!mainWindow || mainWindow.isDestroyed()) return;
   if (mainWindow.isMinimized()) mainWindow.restore();
   mainWindow.show();
   mainWindow.focus();
@@ -98,7 +98,9 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.promptRun, async (_event, payload: unknown) => {
     const input = promptInputSchema.parse(payload);
     const output = runPrompt(input, (update) => {
-      mainWindow?.webContents.send(IPC_CHANNELS.promptOutput, update);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(IPC_CHANNELS.promptOutput, update);
+      }
     });
     return output;
   });
@@ -110,7 +112,7 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle(IPC_CHANNELS.dialogSelectDirectory, async () => {
-    if (!mainWindow) return null;
+    if (!mainWindow || mainWindow.isDestroyed()) return null;
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ["openDirectory"]
     });
@@ -182,7 +184,7 @@ function registerIpcHandlers(): void {
     if (typeof color !== "string" || !color) {
       throw new Error("Invalid color");
     }
-    mainWindow?.setBackgroundColor(color);
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setBackgroundColor(color);
   });
 
   // ── Project handlers ──────────────────────────────────────────────
@@ -207,7 +209,9 @@ function registerIpcHandlers(): void {
       throw new Error("Invalid arguments");
     }
     renderComposition(dir, compositionId, (progress) => {
-      mainWindow?.webContents.send(IPC_CHANNELS.projectRenderProgress, progress);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(IPC_CHANNELS.projectRenderProgress, progress);
+      }
     });
   });
 
