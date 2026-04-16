@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { promises as fs } from "node:fs";
@@ -364,6 +365,89 @@ export async function listCompositions(dir: string): Promise<CompositionFile[]> 
   }
 }
 
+export async function deleteComposition(
+  dir: string,
+  compositionId: string
+): Promise<void> {
+  const root = resolveProjectRoot(dir);
+  const id = compositionId.trim();
+  if (!id) {
+    throw new Error("Invalid composition name.");
+  }
+  const files = await listCompositions(dir);
+  const match = files.find((f) => f.name === id);
+  if (!match) {
+    throw new Error("Composition not found.");
+  }
+  const compositionsDir = path.resolve(path.join(root, "compositions"));
+  const resolvedFile = path.resolve(match.path);
+  const relativeToCompositions = path.relative(compositionsDir, resolvedFile);
+  if (relativeToCompositions.startsWith("..") || path.isAbsolute(relativeToCompositions)) {
+    throw new Error("Invalid composition path.");
+  }
+  try {
+    await fs.unlink(resolvedFile);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") {
+      throw new Error("Composition file not found.");
+    }
+    throw err;
+  }
+}
+
+const MENTION_IGNORE_DIRS = new Set([
+  "node_modules",
+  "src",
+  "system-prompt",
+  "output",
+  ".git",
+  "dist",
+  "build",
+  ".next",
+  "coverage",
+  ".cache",
+  ".turbo",
+  ".remotion"
+]);
+
+const MENTION_MAX_FILES = 6000;
+
+/**
+ * Recursive relative POSIX paths from the project root for @-file mentions (excludes bulky trees).
+ */
+export async function listProjectFilesForMention(dir: string): Promise<string[]> {
+  const root = resolveProjectRoot(dir);
+  const out: string[] = [];
+
+  async function walk(relDir: string): Promise<void> {
+    if (out.length >= MENTION_MAX_FILES) return;
+    const abs = relDir ? path.join(root, relDir) : root;
+    let entries: import("node:fs").Dirent[];
+    try {
+      entries = await fs.readdir(abs, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    entries.sort((a, b) => a.name.localeCompare(b.name));
+    for (const e of entries) {
+      if (out.length >= MENTION_MAX_FILES) return;
+      const name = e.name;
+      const rel = relDir ? `${relDir}/${name}` : name;
+      const posix = rel.split(path.sep).join("/");
+      if (e.isDirectory()) {
+        if (MENTION_IGNORE_DIRS.has(name)) continue;
+        await walk(rel);
+      } else {
+        out.push(posix);
+      }
+    }
+  }
+
+  await walk("");
+  return out.sort((a, b) => a.localeCompare(b));
+}
+
 // ── Video Rendering ─────────────────────────────────────────────────────
 
 export async function renderComposition(
@@ -484,6 +568,52 @@ export async function listOutputs(dir: string): Promise<RenderHistoryItem[]> {
   } catch {
     return [];
   }
+}
+
+// ── Clipboard pasted images (composer) ─────────────────────────────────
+
+const CLIPBOARD_MIME_TO_EXT: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/jpg": "jpg",
+  "image/gif": "gif",
+  "image/webp": "webp",
+  "image/avif": "avif"
+};
+
+const MAX_CLIPBOARD_IMAGE_BYTES = 25 * 1024 * 1024;
+
+export async function writeClipboardAsset(
+  dir: string,
+  dataBase64: string,
+  mimeType: string
+): Promise<{ relativePath: string }> {
+  const root = resolveProjectRoot(dir);
+  const normalizedMime =
+    mimeType
+      .toLowerCase()
+      .split(";")[0]
+      ?.trim() ?? "image/png";
+  const ext = CLIPBOARD_MIME_TO_EXT[normalizedMime] ?? "png";
+  const relDir = ".snug/pasted";
+  const outDir = path.join(root, relDir);
+  await fs.mkdir(outDir, { recursive: true });
+  const fileName = `${randomUUID()}.${ext}`;
+  const fullPath = path.join(outDir, fileName);
+  let buffer: Buffer;
+  try {
+    buffer = Buffer.from(dataBase64, "base64");
+  } catch {
+    throw new Error("Invalid base64 image data.");
+  }
+  if (buffer.length === 0) {
+    throw new Error("Empty image data.");
+  }
+  if (buffer.length > MAX_CLIPBOARD_IMAGE_BYTES) {
+    throw new Error("Image too large (max 25MB).");
+  }
+  await fs.writeFile(fullPath, buffer);
+  return { relativePath: `${relDir}/${fileName}` };
 }
 
 // ── System Prompt ───────────────────────────────────────────────────────

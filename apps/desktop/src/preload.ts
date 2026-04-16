@@ -58,7 +58,12 @@ const nativeApi: NativeApi = {
     },
     listOutputs: (dir) => ipcRenderer.invoke(IPC_CHANNELS.projectListOutputs, dir),
     listCompositions: (dir) => ipcRenderer.invoke(IPC_CHANNELS.projectListCompositions, dir),
-    readSystemPrompt: (dir) => ipcRenderer.invoke(IPC_CHANNELS.projectReadSystemPrompt, dir)
+    deleteComposition: (projectDir, compositionId) =>
+      ipcRenderer.invoke(IPC_CHANNELS.projectDeleteComposition, projectDir, compositionId),
+    readSystemPrompt: (dir) => ipcRenderer.invoke(IPC_CHANNELS.projectReadSystemPrompt, dir),
+    writeClipboardAsset: (input) =>
+      ipcRenderer.invoke(IPC_CHANNELS.projectWriteClipboardAsset, input),
+    listFiles: (projectDir) => ipcRenderer.invoke(IPC_CHANNELS.projectListFiles, projectDir)
   },
   auth: {
     login: () => ipcRenderer.invoke(IPC_CHANNELS.authLogin),

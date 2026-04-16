@@ -1,6 +1,8 @@
 import type {
   Agent,
   CompositionFile,
+  ProjectWriteClipboardAssetInput,
+  ProjectWriteClipboardAssetResult,
   PromptInput,
   PromptOutput,
   RenderHistoryItem,
@@ -32,7 +34,10 @@ export const IPC_CHANNELS = {
   projectRenderProgress: "project:render-progress",
   projectListOutputs: "project:list-outputs",
   projectListCompositions: "project:list-compositions",
+  projectDeleteComposition: "project:delete-composition",
   projectReadSystemPrompt: "project:read-system-prompt",
+  projectWriteClipboardAsset: "project:write-clipboard-asset",
+  projectListFiles: "project:list-files",
   authLogin: "auth:login",
   authGetSession: "auth:get-session",
   authLogout: "auth:logout",
@@ -81,7 +86,13 @@ export interface NativeApi {
     onRenderProgress: (callback: (progress: RenderProgress) => void) => () => void;
     listOutputs: (dir: string) => Promise<RenderHistoryItem[]>;
     listCompositions: (dir: string) => Promise<CompositionFile[]>;
+    deleteComposition: (projectDir: string, compositionId: string) => Promise<void>;
     readSystemPrompt: (dir: string) => Promise<string>;
+    writeClipboardAsset: (
+      input: ProjectWriteClipboardAssetInput
+    ) => Promise<ProjectWriteClipboardAssetResult>;
+    /** Relative POSIX paths from project root for @-mentions in the composer. */
+    listFiles: (projectDir: string) => Promise<string[]>;
   };
   auth: {
     login: () => Promise<User>;

@@ -113,6 +113,7 @@ export default function App() {
                 renderHistory={state.renderHistory}
                 onSelectComposition={state.selectComposition}
                 onCompositionMenuOpen={() => void state.refreshCompositions()}
+                onDeleteComposition={(id) => void state.deleteComposition(id)}
                 onRenderHistoryMenuOpen={() => void state.refreshRenderHistory()}
                 onOpenOutputVideo={(p) => void state.openOutputVideo(p)}
                 onRender={(id) => void state.triggerRender(id)}
@@ -130,9 +131,13 @@ export default function App() {
               isRunning={state.isRunning}
               playerRunning={state.playerRunning}
               playerStarting={state.playerStarting}
+              composerImages={state.composerImages}
               onSetPrompt={state.setPrompt}
               onSelectAgent={state.setSelectedAgent}
+              onAddComposerImages={state.addComposerImages}
+              onRemoveComposerImage={state.removeComposerImage}
               onSubmit={() => void state.onSubmit()}
+              fetchProjectFiles={state.fetchProjectFiles}
               onStop={() => void state.onStop()}
               onPreview={state.onPreview}
             />

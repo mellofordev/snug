@@ -1,7 +1,9 @@
 import type { User } from "@acme/contracts";
+import { HugeiconsIcon } from "@hugeicons/react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FolderOpenIcon } from "@hugeicons/core-free-icons";
 
 const STAGE_LABEL: Record<"scaffold" | "install" | "player", string> = {
   scaffold: "Copying template…",
@@ -40,9 +42,9 @@ export function CreateProjectStep({
 
       {/* Base directory picker */}
       {baseDirectory ? (
-        <div className="flex w-full items-center gap-2 text-xs text-muted-foreground">
-          <span className="shrink-0">Location:</span>
-          <span className="min-w-0 truncate font-mono">{baseDirectory}</span>
+        <div className="flex w-full justify-center items-center gap-2 text-xs text-muted-foreground">
+          <HugeiconsIcon icon={FolderOpenIcon} size={14} strokeWidth={2} className="shrink-0" />
+          <span className="min-w-0 truncate">{baseDirectory}</span>
           <Button
             variant="link"
             size="sm"
@@ -68,12 +70,6 @@ export function CreateProjectStep({
         }}
         autoFocus
       />
-
-      {safeName && baseDirectory && (
-        <p className="w-full truncate font-mono text-xs text-muted-foreground">
-          {baseDirectory}/{safeName}
-        </p>
-      )}
 
       {/* Progress indicator */}
       {createStage && (

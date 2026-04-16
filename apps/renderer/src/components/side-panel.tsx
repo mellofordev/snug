@@ -138,7 +138,7 @@ export function SidePanel({
                 className="inline-flex border  rounded-full h-5 w-5 min-h-5 min-w-5 max-h-5 max-w-5 shrink-0 items-center justify-center  p-0 text-muted-foreground shadow-none transition-colors hover:bg-muted/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label="Account menu"
               >
-                <HugeiconsIcon icon={UserIcon} size={14} strokeWidth={2} className="shrink-0" />
+                <HugeiconsIcon icon={UserIcon} size={10} strokeWidth={1} className="shrink-0" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-52">
                 <div className="px-2 py-1.5">
@@ -147,11 +147,11 @@ export function SidePanel({
                 </div>
                 <DropdownMenuSeparator />
                 <DropdownMenuSub>
-                  <DropdownMenuSubTrigger className="flex items-center gap-2"><HugeiconsIcon icon={SettingsIcon} size={14} strokeWidth={2} className="shrink-0" /> Settings</DropdownMenuSubTrigger>
+                  <DropdownMenuSubTrigger className="flex items-center gap-2"><HugeiconsIcon icon={SettingsIcon} size={10} strokeWidth={1} className="shrink-0" /> Settings</DropdownMenuSubTrigger>
                   <DropdownMenuSubContent className="min-w-44">
                     <DropdownMenuGroup>
                       <DropdownMenuLabel className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <HugeiconsIcon icon={SunIcon} size={14} strokeWidth={2} className="shrink-0" />
+                        <HugeiconsIcon icon={SunIcon} size={10} strokeWidth={1} className="shrink-0" />
                         <span>Theme</span>
                       </DropdownMenuLabel>
                       <DropdownMenuRadioGroup
@@ -163,15 +163,15 @@ export function SidePanel({
                         }}
                       >
                         <DropdownMenuRadioItem value="light" className="gap-2">
-                          <HugeiconsIcon icon={SunIcon} size={14} strokeWidth={2} className="shrink-0 text-muted-foreground" />
+                          <HugeiconsIcon icon={SunIcon} size={10} strokeWidth={1} className="shrink-0 text-muted-foreground" />
                           <span>Light</span>
                         </DropdownMenuRadioItem>
                         <DropdownMenuRadioItem value="dark" className="gap-2">
-                          <HugeiconsIcon icon={Moon02Icon} size={14} strokeWidth={2} className="shrink-0 text-muted-foreground" />
+                          <HugeiconsIcon icon={Moon02Icon} size={10} strokeWidth={1} className="shrink-0 text-muted-foreground" />
                           <span>Dark</span>
                         </DropdownMenuRadioItem>
                         <DropdownMenuRadioItem value="system" className="gap-2">
-                          <HugeiconsIcon icon={ComputerIcon} size={14} strokeWidth={2} className="shrink-0 text-muted-foreground" />
+                          <HugeiconsIcon icon={ComputerIcon} size={10} strokeWidth={1} className="shrink-0 text-muted-foreground" />
                           <span>System</span>
                         </DropdownMenuRadioItem>
                       </DropdownMenuRadioGroup>
@@ -179,7 +179,7 @@ export function SidePanel({
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={onLogout} className="flex items-center gap-2"><HugeiconsIcon icon={LogoutIcon} size={14} strokeWidth={2} className="shrink-0" /> Log out</DropdownMenuItem>
+                <DropdownMenuItem onClick={onLogout} className="flex items-center gap-2"><HugeiconsIcon icon={LogoutIcon} size={10} strokeWidth={1} className="shrink-0" /> Log out</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
