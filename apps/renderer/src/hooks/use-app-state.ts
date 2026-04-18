@@ -4,6 +4,7 @@ import type {
   Agent,
   AgentId,
   ChatMessage,
+  Framework,
   NativeApi,
   PromptOutput,
   RenderHistoryItem,
@@ -142,6 +143,8 @@ export interface AppState {
   setSidebarNewProjectOpen: (open: boolean) => void;
   newProjectName: string;
   setNewProjectName: (name: string) => void;
+  selectedFramework: Framework;
+  setSelectedFramework: (framework: Framework) => void;
   creatingProject: boolean;
   createStage: "scaffold" | "install" | "player" | null;
   onNewProject: () => void;
@@ -253,6 +256,7 @@ export function useAppState(api: NativeApi | undefined): AppState {
   const [baseDirectory, setBaseDirectory] = useState<string | null>(null);
   const [sidebarNewProjectOpen, setSidebarNewProjectOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
+  const [selectedFramework, setSelectedFramework] = useState<Framework>("remotion");
   const [creatingProject, setCreatingProject] = useState(false);
   const [createStage, setCreateStage] = useState<"scaffold" | "install" | "player" | null>(null);
 
@@ -600,7 +604,7 @@ export function useAppState(api: NativeApi | undefined): AppState {
 
       // Run scaffold: copies template files + bun install
       setCreateStage("install");
-      const result = await api.project.init(created);
+      const result = await api.project.init(created, selectedFramework);
       if (!result.success) {
         setError(`Project setup failed: ${result.error}`);
         setCreatingProject(false);
@@ -618,7 +622,7 @@ export function useAppState(api: NativeApi | undefined): AppState {
       setCreatingProject(false);
       setCreateStage(null);
     }
-  }, [api, baseDirectory, newProjectName, setAndPersistDirectory]);
+  }, [api, baseDirectory, newProjectName, selectedFramework, setAndPersistDirectory]);
 
   const onChangeBaseDirectory = useCallback(async () => {
     if (!api) return;
@@ -890,6 +894,8 @@ export function useAppState(api: NativeApi | undefined): AppState {
     setSidebarNewProjectOpen,
     newProjectName,
     setNewProjectName,
+    selectedFramework,
+    setSelectedFramework,
     creatingProject,
     createStage,
     onNewProject,

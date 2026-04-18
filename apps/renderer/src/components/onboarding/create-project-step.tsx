@@ -1,4 +1,4 @@
-import type { User } from "@acme/contracts";
+import { FRAMEWORKS, type Framework, type User } from "@acme/contracts";
 import { HugeiconsIcon } from "@hugeicons/react";
 
 import { Button } from "@/components/ui/button";
@@ -11,13 +11,20 @@ const STAGE_LABEL: Record<"scaffold" | "install" | "player", string> = {
   player: "Starting preview…",
 };
 
+const FRAMEWORK_LABEL: Record<Framework, string> = {
+  remotion: "Remotion",
+  hyperframes: "Hyperframes",
+};
+
 interface CreateProjectStepProps {
   user: User;
   baseDirectory: string | null;
   projectName: string;
+  framework: Framework;
   creating: boolean;
   createStage: "scaffold" | "install" | "player" | null;
   onSetName: (name: string) => void;
+  onSetFramework: (framework: Framework) => void;
   onChangeBase: () => void;
   onCreate: () => void;
 }
@@ -26,9 +33,11 @@ export function CreateProjectStep({
   user,
   baseDirectory,
   projectName,
+  framework,
   creating,
   createStage,
   onSetName,
+  onSetFramework,
   onChangeBase,
   onCreate,
 }: CreateProjectStepProps) {
@@ -70,6 +79,23 @@ export function CreateProjectStep({
         }}
         autoFocus
       />
+
+      {/* Framework picker */}
+      <div className="flex w-full gap-2">
+        {FRAMEWORKS.map((fw) => (
+          <Button
+            key={fw}
+            type="button"
+            variant={framework === fw ? "default" : "outline"}
+            size="sm"
+            className="flex-1"
+            onClick={() => onSetFramework(fw)}
+            disabled={creating}
+          >
+            {FRAMEWORK_LABEL[fw]}
+          </Button>
+        ))}
+      </div>
 
       {/* Progress indicator */}
       {createStage && (

@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from "electro
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
-import { projectWriteClipboardAssetSchema, promptInputSchema } from "@acme/contracts";
+import { isFramework, projectWriteClipboardAssetSchema, promptInputSchema } from "@acme/contracts";
 
 import { IPC_CHANNELS } from "./ipcChannels";
 import { detectAgents, runPrompt, stopPrompt } from "./agentManager";
@@ -192,9 +192,10 @@ function registerIpcHandlers(): void {
 
   // ── Project handlers ──────────────────────────────────────────────
 
-  ipcMain.handle(IPC_CHANNELS.projectInit, async (_event, dir: unknown) => {
+  ipcMain.handle(IPC_CHANNELS.projectInit, async (_event, dir: unknown, framework: unknown) => {
     if (typeof dir !== "string") throw new Error("Invalid directory");
-    return initProject(dir);
+    if (!isFramework(framework)) throw new Error("Invalid framework");
+    return initProject(dir, framework);
   });
 
   ipcMain.handle(IPC_CHANNELS.projectStartPlayer, async (_event, dir: unknown) => {

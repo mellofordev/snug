@@ -1,4 +1,4 @@
-import type { User } from "@acme/contracts";
+import type { Framework, User } from "@acme/contracts";
 
 import { Badge } from "@/components/ui/badge";
 
@@ -31,9 +31,11 @@ export interface OnboardingProps {
   onLogin: () => void;
   baseDirectory: string | null;
   projectName: string;
+  framework: Framework;
   creating: boolean;
   createStage: "scaffold" | "install" | "player" | null;
   onSetName: (name: string) => void;
+  onSetFramework: (framework: Framework) => void;
   onChangeBase: () => void;
   onCreate: () => void;
 }
@@ -69,9 +71,11 @@ export function Onboarding(props: OnboardingProps) {
             user={props.user}
             baseDirectory={props.baseDirectory}
             projectName={props.projectName}
+            framework={props.framework}
             creating={props.creating}
             createStage={props.createStage}
             onSetName={props.onSetName}
+            onSetFramework={props.onSetFramework}
             onChangeBase={props.onChangeBase}
             onCreate={props.onCreate}
           />

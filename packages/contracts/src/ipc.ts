@@ -11,6 +11,13 @@ import type {
 import type { User } from "./auth";
 import type { UpdateStatus } from "./update";
 
+/** Scaffold templates available under `packages/scaffold/templates/<framework>/`. */
+export const FRAMEWORKS = ["remotion", "hyperframes"] as const;
+export type Framework = (typeof FRAMEWORKS)[number];
+export function isFramework(value: unknown): value is Framework {
+  return typeof value === "string" && (FRAMEWORKS as readonly string[]).includes(value);
+}
+
 export const IPC_CHANNELS = {
   agentsDetect: "agents:detect",
   promptRun: "prompt:run",
@@ -79,7 +86,7 @@ export interface NativeApi {
     setBackgroundColor: (color: string) => Promise<void>;
   };
   project: {
-    init: (dir: string) => Promise<{ success: boolean; error?: string }>;
+    init: (dir: string, framework: Framework) => Promise<{ success: boolean; error?: string }>;
     startPlayer: (dir: string) => Promise<{ url: string }>;
     stopPlayer: (dir: string) => Promise<void>;
     render: (dir: string, compositionId: string) => Promise<void>;

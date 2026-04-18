@@ -43,7 +43,7 @@ const nativeApi: NativeApi = {
     setBackgroundColor: (color) => ipcRenderer.invoke(IPC_CHANNELS.windowSetBackgroundColor, color)
   },
   project: {
-    init: (dir) => ipcRenderer.invoke(IPC_CHANNELS.projectInit, dir),
+    init: (dir, framework) => ipcRenderer.invoke(IPC_CHANNELS.projectInit, dir, framework),
     startPlayer: (dir) => ipcRenderer.invoke(IPC_CHANNELS.projectStartPlayer, dir),
     stopPlayer: (dir) => ipcRenderer.invoke(IPC_CHANNELS.projectStopPlayer, dir),
     render: (dir, compositionId) => ipcRenderer.invoke(IPC_CHANNELS.projectRender, dir, compositionId),

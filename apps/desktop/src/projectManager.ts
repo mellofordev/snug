@@ -7,7 +7,7 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
-import type { CompositionFile, RenderHistoryItem, RenderProgress } from "@acme/contracts";
+import type { CompositionFile, Framework, RenderHistoryItem, RenderProgress } from "@acme/contracts";
 import { RENDER_SCRIPT } from "@acme/scaffold";
 
 /**
@@ -32,13 +32,18 @@ const DEFAULT_SCAFFOLD_SCRIPTS = {
 
 // ── Template source (GitHub tarball) ────────────────────────────────────
 // Fetched from the monorepo on project init — no API, no R2. Template edits
-// land on the user's next init as soon as they reach `main`.
+// land on the user's next init as soon as they reach `main`. The template
+// for each framework lives at `packages/scaffold/templates/<framework>/`.
 const TEMPLATE_REPO = "mellofordev/snug";
 const TEMPLATE_REF = "main";
-const TEMPLATE_SUBPATH = "packages/scaffold/template";
+const TEMPLATES_ROOT = "packages/scaffold/templates";
 
 function templateTarballUrl(): string {
   return `https://codeload.github.com/${TEMPLATE_REPO}/tar.gz/refs/heads/${TEMPLATE_REF}`;
+}
+
+function templateSubpath(framework: Framework): string {
+  return `${TEMPLATES_ROOT}/${framework}`;
 }
 
 /**
@@ -46,14 +51,14 @@ function templateTarballUrl(): string {
  * That prefix plus the template subpath must be stripped so only template contents
  * land at the project root.
  */
-function templateStripComponents(): number {
-  // "<repo>-<ref>" + each segment of TEMPLATE_SUBPATH
-  return 1 + TEMPLATE_SUBPATH.split("/").filter(Boolean).length;
+function templateStripComponents(framework: Framework): number {
+  // "<repo>-<ref>" + each segment of the template subpath
+  return 1 + templateSubpath(framework).split("/").filter(Boolean).length;
 }
 
-function tarballInternalPrefix(): string {
+function tarballInternalPrefix(framework: Framework): string {
   const repoName = TEMPLATE_REPO.split("/").pop() ?? "snug";
-  return `${repoName}-${TEMPLATE_REF}/${TEMPLATE_SUBPATH}`;
+  return `${repoName}-${TEMPLATE_REF}/${templateSubpath(framework)}`;
 }
 
 async function downloadTarball(url: string, destPath: string): Promise<void> {
@@ -73,7 +78,11 @@ async function downloadTarball(url: string, destPath: string): Promise<void> {
   await pipeline(Readable.fromWeb(res.body as unknown as import("node:stream/web").ReadableStream), createWriteStream(destPath));
 }
 
-async function extractTemplate(tarPath: string, projectRoot: string): Promise<void> {
+async function extractTemplate(
+  tarPath: string,
+  projectRoot: string,
+  framework: Framework
+): Promise<void> {
   await fs.mkdir(projectRoot, { recursive: true });
   await new Promise<void>((resolve, reject) => {
     const child = spawn(
@@ -83,8 +92,8 @@ async function extractTemplate(tarPath: string, projectRoot: string): Promise<vo
         tarPath,
         "-C",
         projectRoot,
-        `--strip-components=${templateStripComponents()}`,
-        tarballInternalPrefix()
+        `--strip-components=${templateStripComponents(framework)}`,
+        tarballInternalPrefix(framework)
       ],
       { stdio: ["ignore", "pipe", "pipe"] }
     );
@@ -102,11 +111,14 @@ async function extractTemplate(tarPath: string, projectRoot: string): Promise<vo
   });
 }
 
-/** Skip fetch/copy/install when scaffold is already complete. */
+/**
+ * Skip fetch/copy/install when scaffold is already complete. Framework-agnostic —
+ * different templates may lay files out differently, so we only check for a
+ * package.json with a `player` script (required by every template).
+ */
 function shouldSkipProjectInit(root: string): boolean {
-  const marker = path.join(root, "compositions", "HelloWorld.tsx");
   const pkgPath = path.join(root, "package.json");
-  if (!existsSync(marker) || !existsSync(pkgPath)) return false;
+  if (!existsSync(pkgPath)) return false;
   try {
     const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { scripts?: { player?: string } };
     return typeof pkg.scripts?.player === "string" && pkg.scripts.player.trim().length > 0;
@@ -192,7 +204,8 @@ function isProcessAlive(pid: number): boolean {
 // ── Project Initialization ──────────────────────────────────────────────
 
 export async function initProject(
-  dir: string
+  dir: string,
+  framework: Framework
 ): Promise<{ success: boolean; error?: string }> {
   let root: string;
   try {
@@ -212,7 +225,7 @@ export async function initProject(
     }
 
     await downloadTarball(templateTarballUrl(), tarPath);
-    await extractTemplate(tarPath, root);
+    await extractTemplate(tarPath, root, framework);
     await fs.mkdir(path.join(root, "output"), { recursive: true });
 
     const pkgAfterCopy = path.join(root, "package.json");
