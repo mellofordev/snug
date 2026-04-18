@@ -31,15 +31,18 @@ const DEFAULT_SCAFFOLD_SCRIPTS = {
 } as const;
 
 // ── Template source (GitHub tarball) ────────────────────────────────────
-// Fetched from the monorepo on project init — no API, no R2. Template edits
-// land on the user's next init as soon as they reach `main`. The template
-// for each framework lives at `packages/scaffold/templates/<framework>/`.
+// Fetched from the monorepo on project init — no API, no R2. Templates are
+// pinned to an immutable git tag (not a branch) so each desktop release ships
+// a reproducible scaffold and in-flight commits on `master` can't reach users.
+// To ship a template change: cut a new `templates-vN` tag and bump
+// `TEMPLATE_REF` in the next desktop release.
+// The template for each framework lives at `packages/scaffold/templates/<framework>/`.
 const TEMPLATE_REPO = "mellofordev/snug";
-const TEMPLATE_REF = "main";
+const TEMPLATE_REF = "templates-v1";
 const TEMPLATES_ROOT = "packages/scaffold/templates";
 
 function templateTarballUrl(): string {
-  return `https://codeload.github.com/${TEMPLATE_REPO}/tar.gz/refs/heads/${TEMPLATE_REF}`;
+  return `https://codeload.github.com/${TEMPLATE_REPO}/tar.gz/refs/tags/${TEMPLATE_REF}`;
 }
 
 function templateSubpath(framework: Framework): string {
