@@ -26,7 +26,7 @@ This is a Bun + Turborepo monorepo with five workspace packages:
 
 ```
 packages/contracts/   — shared Zod schemas + TypeScript types + IPC channel constants
-packages/scaffold/    — `render-composition.sh` only (shipped with desktop); Remotion template lives under `template/` for publishing, not bundled in the app
+packages/scaffold/    — `render-composition.sh` only (shipped with desktop); per-framework templates live under `templates/<framework>/`, fetched at init via GitHub tag (not bundled in the app)
 apps/desktop/         — Electron main process + preload script
 apps/renderer/        — React + Vite + Tailwind UI (runs in Electron's renderer)
 apps/api/             — Hono API on Cloudflare Workers (auth, user management via Drizzle + Supabase Postgres)
@@ -44,7 +44,7 @@ Renderer (React)
                  └─ settingsStore.ts  — persists JSON to userData/settings.json
 ```
 
-New projects: `project:init` downloads `https://codeload.github.com/mellofordev/snug/tar.gz/refs/heads/main` to a temp file, extracts only `packages/scaffold/template/**` into the project root via system `tar --strip-components`, then runs `bun install`. No API or R2 hop — template edits are live once they reach `main`. The ref is a const in `apps/desktop/src/projectManager.ts` (`TEMPLATE_REPO`, `TEMPLATE_REF`, `TEMPLATE_SUBPATH`). The desktop bundle **externalizes** `@acme/scaffold` (`--external @acme/scaffold` in tsup) so `render-composition.sh` resolves to real disk paths at runtime.
+New projects: `project:init` downloads `https://codeload.github.com/mellofordev/snug/tar.gz/refs/tags/<TEMPLATE_REF>` to a temp file, extracts only `packages/scaffold/templates/<framework>/**` (framework picked at init) into the project root via system `tar --strip-components`, then runs `bun install`. No API or R2 hop. Templates are pinned to an immutable git tag (e.g. `templates-v1`) — each desktop release ships a reproducible scaffold. To roll out a template change: edit under `packages/scaffold/templates/`, land it on `master`, cut a new `templates-vN` tag, bump `TEMPLATE_REF` in `apps/desktop/src/projectManager.ts`, then ship a desktop release. The consts are `TEMPLATE_REPO`, `TEMPLATE_REF`, `TEMPLATES_ROOT`. The desktop bundle **externalizes** `@acme/scaffold` (`--external @acme/scaffold` in tsup) so `render-composition.sh` resolves to real disk paths at runtime.
 
 ### Key contracts conventions
 
