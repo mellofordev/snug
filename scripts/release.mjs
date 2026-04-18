@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 /**
  * Release — bump version (optional), build mac artifacts, upload to R2.
  *
@@ -20,10 +18,23 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { createHash, createHmac } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { createInterface } from "node:readline";
+
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+
+
+function loadRepoEnv(repoRoot) {
+  const envPath = path.join(repoRoot, ".env");
+  if (!existsSync(envPath)) return;
+  for (const line of readFileSync(envPath, "utf8").split("\n")) {
+    const m = line.match(/^\s*([\w]+)\s*=\s*(.+?)\s*$/);
+    if (m && !process.env[m[1]]) {
+      process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
+    }
+  }
+}
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const DESKTOP_PKG_PATH = path.join(ROOT, "apps", "desktop", "package.json");
@@ -36,7 +47,6 @@ const noBuild = argv.includes("--no-build");
 const bumpIdx = argv.indexOf("--bump");
 const bumpType = bumpIdx !== -1 ? argv[bumpIdx + 1] : null;
 
-// ── Version bumping ─────────────────────────────────────────────────────
 
 function bumpVersion(current, type) {
   const [major = 0, minor = 0, patch = 0] = current.split(".").map(Number);
@@ -105,109 +115,45 @@ if (uploadOnly) {
   }
 }
 
-// ── Load version from disk (authoritative for upload) ───────────────────
+
 
 const DESKTOP_PKG = JSON.parse(readFileSync(DESKTOP_PKG_PATH, "utf8"));
 const VERSION = DESKTOP_PKG.version;
 
-// Load .env from repo root if present
-try {
-  const envPath = path.join(ROOT, ".env");
-  if (existsSync(envPath)) {
-    const envContent = readFileSync(envPath, "utf8");
-    for (const line of envContent.split("\n")) {
-      const match = line.match(/^\s*([\w]+)\s*=\s*(.+?)\s*$/);
-      if (match && !process.env[match[1]]) {
-        process.env[match[1]] = match[2].replace(/^["']|["']$/g, "");
-      }
-    }
-  }
-} catch {
-  /* ignore */
-}
+loadRepoEnv(ROOT);
 
-const ACCOUNT_ID = process.env.R2_ACCOUNT_ID;
-const ACCESS_KEY = process.env.R2_ACCESS_KEY_ID;
-const SECRET_KEY = process.env.R2_SECRET_ACCESS_KEY;
-
-if (!ACCOUNT_ID || !ACCESS_KEY || !SECRET_KEY) {
-  console.error("✗ Missing R2 credentials (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY).");
+const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID;
+const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID;
+const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY;
+if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY) {
+  console.error(
+    "✗ Missing R2 credentials (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY)."
+  );
   process.exit(1);
 }
 
-const BUCKET = "snug";
-const R2_ENDPOINT = `https://${ACCOUNT_ID}.r2.cloudflarestorage.com`;
+const s3 = new S3Client({
+  region: "auto",
+  endpoint: `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+  credentials: {
+    accessKeyId: R2_ACCESS_KEY_ID,
+    secretAccessKey: R2_SECRET_ACCESS_KEY
+  }
+});
 
-// ── S3v4 signing ──────────────────────────────────────────────────────────
-
-function sha256(data) {
-  return createHash("sha256").update(data).digest("hex");
-}
-
-function hmacSha256(key, data) {
-  return createHmac("sha256", key).update(data).digest();
-}
-
-function getSignatureKey(secretKey, dateStamp, region, service) {
-  let key = hmacSha256(`AWS4${secretKey}`, dateStamp);
-  key = hmacSha256(key, region);
-  key = hmacSha256(key, service);
-  key = hmacSha256(key, "aws4_request");
-  return key;
-}
 
 async function r2Put(objectKey, body, contentType) {
-  const now = new Date();
-  const dateStamp = now.toISOString().slice(0, 10).replace(/-/g, "");
-  const amzDate = `${now.toISOString().replace(/[-:]/g, "").split(".")[0]}Z`;
-  const region = "auto";
-  const service = "s3";
-
-  const payloadHash = sha256(body);
-  const canonicalUri = `/${BUCKET}/${objectKey}`;
-  const canonicalQueryString = "";
-  const host = `${ACCOUNT_ID}.r2.cloudflarestorage.com`;
-
-  const canonicalHeaders =
-    `content-type:${contentType}\n` +
-    `host:${host}\n` +
-    `x-amz-content-sha256:${payloadHash}\n` +
-    `x-amz-date:${amzDate}\n`;
-  const signedHeaders = "content-type;host;x-amz-content-sha256;x-amz-date";
-
-  const canonicalRequest = ["PUT", canonicalUri, canonicalQueryString, canonicalHeaders, signedHeaders, payloadHash].join(
-    "\n"
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: "snug",
+      Key: objectKey,
+      Body: body,
+      ContentType: contentType
+    })
   );
-
-  const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
-  const stringToSign = ["AWS4-HMAC-SHA256", amzDate, credentialScope, sha256(canonicalRequest)].join("\n");
-
-  const signingKey = getSignatureKey(SECRET_KEY, dateStamp, region, service);
-  const signature = createHmac("sha256", signingKey).update(stringToSign).digest("hex");
-
-  const authorization =
-    `AWS4-HMAC-SHA256 Credential=${ACCESS_KEY}/${credentialScope}, ` +
-    `SignedHeaders=${signedHeaders}, Signature=${signature}`;
-
-  const res = await fetch(`${R2_ENDPOINT}${canonicalUri}`, {
-    method: "PUT",
-    headers: {
-      "Content-Type": contentType,
-      Host: host,
-      "x-amz-content-sha256": payloadHash,
-      "x-amz-date": amzDate,
-      Authorization: authorization
-    },
-    body
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`R2 PUT ${objectKey} failed (${res.status}): ${text}`);
-  }
 }
 
-// ── Artifacts (must match apps/desktop/package.json version) ────────────
+
 
 const dmgName = "Snug.dmg";
 const dmgPath = path.join(DMG_DIR, dmgName);
@@ -242,7 +188,6 @@ if (!existsSync(ymlPath)) {
 
 const zipFile = expectedZip;
 
-// Parse --notes flag
 let releaseNotes = "";
 const notesIdx = argv.indexOf("--notes");
 if (notesIdx !== -1 && argv[notesIdx + 1]) {
@@ -259,16 +204,13 @@ if (notesIdx !== -1 && argv[notesIdx + 1]) {
 
 console.log(`\n  Uploading Snug v${VERSION} to R2…`);
 
-const ymlBuffer = readFileSync(ymlPath);
-await r2Put("releases/latest/latest-mac.yml", ymlBuffer, "text/yaml");
+await r2Put("releases/latest/latest-mac.yml", readFileSync(ymlPath), "text/yaml");
 console.log("  ✓ latest-mac.yml");
 
-const zipBuffer = readFileSync(zipPath);
-await r2Put(`releases/latest/${zipFile}`, zipBuffer, "application/zip");
+await r2Put(`releases/latest/${zipFile}`, readFileSync(zipPath), "application/zip");
 console.log(`  ✓ ${zipFile}`);
 
-const dmgBuffer = readFileSync(dmgPath);
-await r2Put(`releases/latest/${dmgName}`, dmgBuffer, "application/octet-stream");
+await r2Put(`releases/latest/${dmgName}`, readFileSync(dmgPath), "application/octet-stream");
 console.log(`  ✓ ${dmgName}`);
 
 console.log(`

@@ -1,11 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import { createWriteStream, existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { promises as fs } from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 
 import type { CompositionFile, RenderHistoryItem, RenderProgress } from "@acme/contracts";
-import { INIT_SCRIPT, RENDER_SCRIPT, TEMPLATE_DIR } from "@acme/scaffold";
+import { RENDER_SCRIPT } from "@acme/scaffold";
 
 /**
  * `spawn` cannot execute paths inside `app.asar`. electron-builder mirrors unpacked
@@ -18,9 +21,133 @@ function resourcePathForExec(absPath: string): string {
   return existsSync(candidate) ? candidate : absPath;
 }
 
-const resolvedInitScript = resourcePathForExec(INIT_SCRIPT);
 const resolvedRenderScript = resourcePathForExec(RENDER_SCRIPT);
-const resolvedTemplateDir = resourcePathForExec(TEMPLATE_DIR);
+
+/** Canonical Remotion scripts for Snug projects (matches API-delivered scaffold template). */
+const DEFAULT_SCAFFOLD_SCRIPTS = {
+  player: "vite",
+  studio: "remotion studio",
+  render: "remotion render"
+} as const;
+
+// ── Template source (GitHub tarball) ────────────────────────────────────
+// Fetched from the monorepo on project init — no API, no R2. Template edits
+// land on the user's next init as soon as they reach `main`.
+const TEMPLATE_REPO = "mellofordev/snug";
+const TEMPLATE_REF = "main";
+const TEMPLATE_SUBPATH = "packages/scaffold/template";
+
+function templateTarballUrl(): string {
+  return `https://codeload.github.com/${TEMPLATE_REPO}/tar.gz/refs/heads/${TEMPLATE_REF}`;
+}
+
+/**
+ * GitHub codeload tarballs wrap everything in a top-level `<repo>-<ref>/` directory.
+ * That prefix plus the template subpath must be stripped so only template contents
+ * land at the project root.
+ */
+function templateStripComponents(): number {
+  // "<repo>-<ref>" + each segment of TEMPLATE_SUBPATH
+  return 1 + TEMPLATE_SUBPATH.split("/").filter(Boolean).length;
+}
+
+function tarballInternalPrefix(): string {
+  const repoName = TEMPLATE_REPO.split("/").pop() ?? "snug";
+  return `${repoName}-${TEMPLATE_REF}/${TEMPLATE_SUBPATH}`;
+}
+
+async function downloadTarball(url: string, destPath: string): Promise<void> {
+  let res: Response;
+  try {
+    res = await fetch(url);
+  } catch {
+    throw new Error(
+      "Could not reach GitHub to download the project template. Check your internet connection and try again."
+    );
+  }
+  if (!res.ok || !res.body) {
+    throw new Error(
+      `GitHub returned ${res.status} when fetching the project template from ${url}.`
+    );
+  }
+  await pipeline(Readable.fromWeb(res.body as unknown as import("node:stream/web").ReadableStream), createWriteStream(destPath));
+}
+
+async function extractTemplate(tarPath: string, projectRoot: string): Promise<void> {
+  await fs.mkdir(projectRoot, { recursive: true });
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(
+      "tar",
+      [
+        "-xzf",
+        tarPath,
+        "-C",
+        projectRoot,
+        `--strip-components=${templateStripComponents()}`,
+        tarballInternalPrefix()
+      ],
+      { stdio: ["ignore", "pipe", "pipe"] }
+    );
+    let stderr = "";
+    child.stderr?.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+    child.on("close", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`tar extract failed (exit ${code})${stderr ? `:\n${stderr.trim()}` : ""}`));
+    });
+    child.on("error", (err) => {
+      reject(new Error(`Failed to run tar: ${err.message}`));
+    });
+  });
+}
+
+/** Skip fetch/copy/install when scaffold is already complete. */
+function shouldSkipProjectInit(root: string): boolean {
+  const marker = path.join(root, "compositions", "HelloWorld.tsx");
+  const pkgPath = path.join(root, "package.json");
+  if (!existsSync(marker) || !existsSync(pkgPath)) return false;
+  try {
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { scripts?: { player?: string } };
+    return typeof pkg.scripts?.player === "string" && pkg.scripts.player.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function runBunInstall(cwd: string): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn("bun", ["install"], {
+      cwd,
+      env: buildEnv(),
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    let stderr = "";
+    let stdout = "";
+    child.stdout?.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString();
+    });
+    child.stderr?.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+    child.on("close", (code) => {
+      if (code === 0) resolve();
+      else {
+        const detail = [stdout.trim(), stderr.trim()].filter(Boolean).join("\n");
+        reject(
+          new Error(
+            detail
+              ? `bun install failed (exit ${code}):\n${detail}`
+              : `bun install failed (exit ${code})`
+          )
+        );
+      }
+    });
+    child.on("error", (err) => {
+      reject(new Error(`Failed to run bun install: ${err.message}`));
+    });
+  });
+}
 
 // Expand PATH for CLI tools
 function buildEnv(): NodeJS.ProcessEnv {
@@ -77,40 +204,27 @@ export async function initProject(
     };
   }
 
+  const tarPath = path.join(os.tmpdir(), `snug-template-${randomUUID()}.tar.gz`);
+
   try {
-    await new Promise<void>((resolve, reject) => {
-      const child = spawn("bash", [resolvedInitScript, root, resolvedTemplateDir], {
-        env: buildEnv(),
-        stdio: ["ignore", "pipe", "pipe"]
-      });
+    if (shouldSkipProjectInit(root)) {
+      return { success: true };
+    }
 
-      let stderr = "";
-      let stdout = "";
-      child.stdout?.on("data", (chunk: Buffer) => {
-        stdout += chunk.toString();
-      });
-      child.stderr?.on("data", (chunk: Buffer) => {
-        stderr += chunk.toString();
-      });
+    await downloadTarball(templateTarballUrl(), tarPath);
+    await extractTemplate(tarPath, root);
+    await fs.mkdir(path.join(root, "output"), { recursive: true });
 
-      child.on("close", (code) => {
-        if (code === 0) resolve();
-        else {
-          const detail = [stdout.trim(), stderr.trim()].filter(Boolean).join("\n");
-          reject(
-            new Error(
-              detail
-                ? `init-project.sh failed (exit ${code}):\n${detail}`
-                : `init-project.sh failed (exit ${code})`
-            )
-          );
-        }
-      });
+    const pkgAfterCopy = path.join(root, "package.json");
+    if (!existsSync(pkgAfterCopy)) {
+      return {
+        success: false,
+        error:
+          "Project scaffold did not produce package.json (internal error). Try again or contact support."
+      };
+    }
 
-      child.on("error", (err) => {
-        reject(new Error(`Failed to run init-project.sh: ${err.message}`));
-      });
-    });
+    await runBunInstall(root);
 
     return { success: true };
   } catch (err) {
@@ -118,6 +232,12 @@ export async function initProject(
       success: false,
       error: err instanceof Error ? err.message : "Unknown error during project init"
     };
+  } finally {
+    try {
+      unlinkSync(tarPath);
+    } catch {
+      /* tarball may not exist if download failed early */
+    }
   }
 }
 
@@ -154,6 +274,33 @@ function extractDevServerUrl(buffer: string): string | null {
   const clean = stripAnsi(buffer);
   const m = clean.match(DEV_SERVER_URL);
   return m ? m[0].replace(/\/$/, "") : null;
+}
+
+/** If package.json is missing scaffold scripts (e.g. partial init), merge canonical defaults. */
+function mergeDefaultScaffoldScripts(root: string): void {
+  const pkgPath = path.join(root, "package.json");
+  if (!existsSync(pkgPath)) return;
+
+  let pkg: { scripts?: Record<string, string> };
+  try {
+    pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { scripts?: Record<string, string> };
+  } catch {
+    return;
+  }
+
+  const keys = ["player", "studio", "render"] as const;
+  let changed = false;
+  pkg.scripts = pkg.scripts ?? {};
+  for (const k of keys) {
+    const v = DEFAULT_SCAFFOLD_SCRIPTS[k];
+    if (typeof v === "string" && v.trim() && !pkg.scripts[k]?.trim()) {
+      pkg.scripts[k] = v;
+      changed = true;
+    }
+  }
+  if (changed) {
+    writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
+  }
 }
 
 /** Child processes started this session, keyed by project dir. */
@@ -207,6 +354,8 @@ export async function startPlayer(dir: string): Promise<{ url: string }> {
   if (!existsSync(pkgPath)) {
     throw new Error(`Not a Snug project (no package.json): ${root}`);
   }
+
+  mergeDefaultScaffoldScripts(root);
 
   let pkg: { scripts?: Record<string, string> };
   try {
