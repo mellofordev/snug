@@ -1,4 +1,3 @@
-import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { sign, verify } from "hono/jwt";
@@ -166,3 +165,4 @@ app.get("/auth/me", async (c) => {
     return c.json({ error: "invalid_token", message: "Token is invalid or expired" }, 401);
   }
 });
+

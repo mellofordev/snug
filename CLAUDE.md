@@ -26,7 +26,7 @@ This is a Bun + Turborepo monorepo with five workspace packages:
 
 ```
 packages/contracts/   — shared Zod schemas + TypeScript types + IPC channel constants
-packages/scaffold/    — Remotion project template on disk + scripts/init-project.sh (used when creating a new project)
+packages/scaffold/    — `render-composition.sh` only (shipped with desktop); Remotion template lives under `template/` for publishing, not bundled in the app
 apps/desktop/         — Electron main process + preload script
 apps/renderer/        — React + Vite + Tailwind UI (runs in Electron's renderer)
 apps/api/             — Hono API on Cloudflare Workers (auth, user management via Drizzle + Supabase Postgres)
@@ -40,11 +40,11 @@ Renderer (React)
        └─ contextBridge        (preload.ts — thin IPC wrapper, no logic)
             └─ ipcMain.handle  (main.ts — validates with Zod, delegates to modules)
                  ├─ agentManager.ts   — spawns claude CLI, streams output
-                 ├─ projectManager.ts — Remotion player/render + runs scaffold init (bash) for new projects
+                 ├─ projectManager.ts — Remotion player/render + scaffolds new projects from a GitHub tarball
                  └─ settingsStore.ts  — persists JSON to userData/settings.json
 ```
 
-New projects: `project:init` runs `packages/scaffold/scripts/init-project.sh`, which copies `packages/scaffold/template/` into the target directory and runs `bun install`. The desktop bundle **externalizes** `@acme/scaffold` (`--external @acme/scaffold` in tsup) so template paths resolve correctly at runtime.
+New projects: `project:init` downloads `https://codeload.github.com/mellofordev/snug/tar.gz/refs/heads/main` to a temp file, extracts only `packages/scaffold/template/**` into the project root via system `tar --strip-components`, then runs `bun install`. No API or R2 hop — template edits are live once they reach `main`. The ref is a const in `apps/desktop/src/projectManager.ts` (`TEMPLATE_REPO`, `TEMPLATE_REF`, `TEMPLATE_SUBPATH`). The desktop bundle **externalizes** `@acme/scaffold` (`--external @acme/scaffold` in tsup) so `render-composition.sh` resolves to real disk paths at runtime.
 
 ### Key contracts conventions
 

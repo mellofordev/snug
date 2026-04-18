@@ -1,6 +1,8 @@
 import type {
   Agent,
   CompositionFile,
+  ProjectWriteClipboardAssetInput,
+  ProjectWriteClipboardAssetResult,
   PromptInput,
   PromptOutput,
   RenderHistoryItem,
@@ -8,6 +10,13 @@ import type {
 } from "./agent";
 import type { User } from "./auth";
 import type { UpdateStatus } from "./update";
+
+/** Scaffold templates available under `packages/scaffold/templates/<framework>/`. */
+export const FRAMEWORKS = ["remotion", "hyperframes"] as const;
+export type Framework = (typeof FRAMEWORKS)[number];
+export function isFramework(value: unknown): value is Framework {
+  return typeof value === "string" && (FRAMEWORKS as readonly string[]).includes(value);
+}
 
 export const IPC_CHANNELS = {
   agentsDetect: "agents:detect",
@@ -32,7 +41,10 @@ export const IPC_CHANNELS = {
   projectRenderProgress: "project:render-progress",
   projectListOutputs: "project:list-outputs",
   projectListCompositions: "project:list-compositions",
+  projectDeleteComposition: "project:delete-composition",
   projectReadSystemPrompt: "project:read-system-prompt",
+  projectWriteClipboardAsset: "project:write-clipboard-asset",
+  projectListFiles: "project:list-files",
   authLogin: "auth:login",
   authGetSession: "auth:get-session",
   authLogout: "auth:logout",
@@ -74,14 +86,20 @@ export interface NativeApi {
     setBackgroundColor: (color: string) => Promise<void>;
   };
   project: {
-    init: (dir: string) => Promise<{ success: boolean; error?: string }>;
+    init: (dir: string, framework: Framework) => Promise<{ success: boolean; error?: string }>;
     startPlayer: (dir: string) => Promise<{ url: string }>;
     stopPlayer: (dir: string) => Promise<void>;
     render: (dir: string, compositionId: string) => Promise<void>;
     onRenderProgress: (callback: (progress: RenderProgress) => void) => () => void;
     listOutputs: (dir: string) => Promise<RenderHistoryItem[]>;
     listCompositions: (dir: string) => Promise<CompositionFile[]>;
+    deleteComposition: (projectDir: string, compositionId: string) => Promise<void>;
     readSystemPrompt: (dir: string) => Promise<string>;
+    writeClipboardAsset: (
+      input: ProjectWriteClipboardAssetInput
+    ) => Promise<ProjectWriteClipboardAssetResult>;
+    /** Relative POSIX paths from project root for @-mentions in the composer. */
+    listFiles: (projectDir: string) => Promise<string[]>;
   };
   auth: {
     login: () => Promise<User>;

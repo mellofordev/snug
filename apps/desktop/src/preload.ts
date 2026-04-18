@@ -43,7 +43,7 @@ const nativeApi: NativeApi = {
     setBackgroundColor: (color) => ipcRenderer.invoke(IPC_CHANNELS.windowSetBackgroundColor, color)
   },
   project: {
-    init: (dir) => ipcRenderer.invoke(IPC_CHANNELS.projectInit, dir),
+    init: (dir, framework) => ipcRenderer.invoke(IPC_CHANNELS.projectInit, dir, framework),
     startPlayer: (dir) => ipcRenderer.invoke(IPC_CHANNELS.projectStartPlayer, dir),
     stopPlayer: (dir) => ipcRenderer.invoke(IPC_CHANNELS.projectStopPlayer, dir),
     render: (dir, compositionId) => ipcRenderer.invoke(IPC_CHANNELS.projectRender, dir, compositionId),
@@ -58,7 +58,12 @@ const nativeApi: NativeApi = {
     },
     listOutputs: (dir) => ipcRenderer.invoke(IPC_CHANNELS.projectListOutputs, dir),
     listCompositions: (dir) => ipcRenderer.invoke(IPC_CHANNELS.projectListCompositions, dir),
-    readSystemPrompt: (dir) => ipcRenderer.invoke(IPC_CHANNELS.projectReadSystemPrompt, dir)
+    deleteComposition: (projectDir, compositionId) =>
+      ipcRenderer.invoke(IPC_CHANNELS.projectDeleteComposition, projectDir, compositionId),
+    readSystemPrompt: (dir) => ipcRenderer.invoke(IPC_CHANNELS.projectReadSystemPrompt, dir),
+    writeClipboardAsset: (input) =>
+      ipcRenderer.invoke(IPC_CHANNELS.projectWriteClipboardAsset, input),
+    listFiles: (projectDir) => ipcRenderer.invoke(IPC_CHANNELS.projectListFiles, projectDir)
   },
   auth: {
     login: () => ipcRenderer.invoke(IPC_CHANNELS.authLogin),

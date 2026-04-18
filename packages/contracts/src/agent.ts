@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const agentIdSchema = z.enum(["claude-code"]);
+export const agentIdSchema = z.enum(["claude-code", "codex"]);
 
 export const agentSchema = z.object({
   id: agentIdSchema,
@@ -16,7 +16,7 @@ export const promptInputSchema = z.object({
   prompt: z.string().trim().min(1).max(10000),
   workingDirectory: z.string().min(1),
   systemPrompt: z.string().optional(),
-  /** Resume an existing Claude Code session instead of starting a new one */
+  /** Resume an existing agent session (Claude: --resume; Codex: exec resume) */
   sessionId: z.string().optional()
 });
 
@@ -69,6 +69,24 @@ export const renderHistoryItemSchema = z.object({
   path: z.string(),
   createdAt: z.string()
 });
+
+/** Save a pasted clipboard image into the project (under `.snug/pasted/`). */
+export const projectWriteClipboardAssetSchema = z.object({
+  workingDirectory: z.string().min(1),
+  dataBase64: z.string().min(1).max(36_000_000),
+  mimeType: z.string().min(1).max(128)
+});
+
+export const projectWriteClipboardAssetResultSchema = z.object({
+  relativePath: z.string().min(1)
+});
+
+export type ProjectWriteClipboardAssetInput = z.infer<
+  typeof projectWriteClipboardAssetSchema
+>;
+export type ProjectWriteClipboardAssetResult = z.infer<
+  typeof projectWriteClipboardAssetResultSchema
+>;
 
 export type AgentId = z.infer<typeof agentIdSchema>;
 export type Agent = z.infer<typeof agentSchema>;

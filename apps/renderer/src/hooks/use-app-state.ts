@@ -4,6 +4,7 @@ import type {
   Agent,
   AgentId,
   ChatMessage,
+  Framework,
   NativeApi,
   PromptOutput,
   RenderHistoryItem,
@@ -12,6 +13,72 @@ import type {
 } from "@acme/contracts";
 
 const RECENT_PROJECTS_KEY = "snug:recent-projects";
+const SELECTED_AGENT_KEY = "snug:selected-agent";
+const LAST_PROJECT_KEY = "snug:last-project";
+const AGENT_SESSIONS_KEY = "snug:agent-sessions-v1";
+
+/** Per-project agent chat + session IDs (persisted). */
+type ProjectAgentState = {
+  sessionIds: Partial<Record<AgentId, string>>;
+  messages: ChatMessage[];
+};
+
+function normalizeProjectAgentState(raw: unknown): ProjectAgentState {
+  if (!raw || typeof raw !== "object") {
+    return { sessionIds: {}, messages: [] };
+  }
+  const o = raw as Record<string, unknown>;
+  const messages = Array.isArray(o.messages) ? (o.messages as ChatMessage[]) : [];
+  if (o.sessionIds && typeof o.sessionIds === "object" && o.sessionIds !== null) {
+    return { sessionIds: o.sessionIds as Partial<Record<AgentId, string>>, messages };
+  }
+  const legacy = o.sessionId;
+  const sid = typeof legacy === "string" ? legacy : null;
+  return {
+    sessionIds: sid ? { "claude-code": sid } : {},
+    messages
+  };
+}
+
+function loadAgentSessionsMap(): Map<string, ProjectAgentState> {
+  try {
+    const raw = readLocalString(AGENT_SESSIONS_KEY);
+    if (!raw) return new Map();
+    const obj = JSON.parse(raw) as Record<string, unknown>;
+    return new Map(
+      Object.entries(obj).map(([path, v]) => [path, normalizeProjectAgentState(v)])
+    );
+  } catch {
+    return new Map();
+  }
+}
+
+function persistAgentSessionsMap(map: Map<string, ProjectAgentState>): void {
+  try {
+    writeLocalString(AGENT_SESSIONS_KEY, JSON.stringify(Object.fromEntries(map)));
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Safe localStorage read — returns null on SSR or quota errors. */
+function readLocalString(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+/** Safe localStorage write — silently ignores quota/privacy errors. */
+function writeLocalString(key: string, value: string | null): void {
+  try {
+    if (value) localStorage.setItem(key, value);
+    else localStorage.removeItem(key);
+  } catch {
+    /* ignore */
+  }
+}
 
 interface CompositionItem {
   id: string;
@@ -21,6 +88,25 @@ interface CompositionItem {
     width: number;
     height: number;
   };
+}
+
+const MAX_COMPOSER_IMAGES = 12;
+
+async function blobToBase64Payload(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const r = reader.result;
+      if (typeof r !== "string") {
+        reject(new Error("Unexpected read result"));
+        return;
+      }
+      const i = r.indexOf(",");
+      resolve(i >= 0 ? r.slice(i + 1) : "");
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("read failed"));
+    reader.readAsDataURL(blob);
+  });
 }
 
 const DEFAULT_COMPOSITION_META: CompositionItem["meta"] = {
@@ -40,6 +126,10 @@ export interface AppState {
 
   prompt: string;
   setPrompt: (value: string) => void;
+  /** Staged reference images (shown as thumbnails); included in the next agent run. */
+  composerImages: { id: string; previewUrl: string }[];
+  addComposerImages: (files: File[]) => void;
+  removeComposerImage: (id: string) => void;
 
   workingDirectory: string;
   recentProjects: string[];
@@ -53,6 +143,8 @@ export interface AppState {
   setSidebarNewProjectOpen: (open: boolean) => void;
   newProjectName: string;
   setNewProjectName: (name: string) => void;
+  selectedFramework: Framework;
+  setSelectedFramework: (framework: Framework) => void;
   creatingProject: boolean;
   createStage: "scaffold" | "install" | "player" | null;
   onNewProject: () => void;
@@ -84,6 +176,9 @@ export interface AppState {
   onPreview: () => Promise<void>;
   selectComposition: (id: string) => void;
   refreshCompositions: () => Promise<void>;
+  deleteComposition: (compositionId: string) => Promise<void>;
+  /** Relative paths from project root (for @-mentions). */
+  fetchProjectFiles: () => Promise<string[]>;
   refreshRenderHistory: () => Promise<void>;
   openOutputVideo: (filePath: string) => Promise<void>;
   triggerRender: (compositionId?: string) => Promise<void>;
@@ -92,22 +187,76 @@ export interface AppState {
 
 export function useAppState(api: NativeApi | undefined): AppState {
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [selectedAgent, setSelectedAgent] = useState<AgentId | "">("");
+  // Preferred model survives relaunch — hydrate from localStorage synchronously
+  // so the Composer never flashes an unintended default before detectAgents runs.
+  const [selectedAgent, setSelectedAgentState] = useState<AgentId | "">(() => {
+    const raw = readLocalString(SELECTED_AGENT_KEY);
+    return raw === "claude-code" || raw === "codex" ? raw : "";
+  });
+  const setSelectedAgent = useCallback((id: AgentId | "") => {
+    setSelectedAgentState(id);
+    writeLocalString(SELECTED_AGENT_KEY, id || null);
+  }, []);
   const [prompt, setPrompt] = useState("");
-  const [workingDirectory, setWorkingDirectory] = useState("");
+  const [composerImages, setComposerImages] = useState<
+    { id: string; blob: Blob; previewUrl: string }[]
+  >([]);
+
+  const addComposerImages = useCallback((files: File[]) => {
+    const incoming = Array.from(files).filter(
+      (f) => f.type.startsWith("image/") && f.size > 0
+    );
+    if (!incoming.length) return;
+    setComposerImages((prev) => {
+      const room = MAX_COMPOSER_IMAGES - prev.length;
+      const take = incoming.slice(0, Math.max(0, room));
+      const added = take.map((file) => ({
+        id:
+          typeof crypto !== "undefined" && "randomUUID" in crypto
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        blob: file as Blob,
+        previewUrl: URL.createObjectURL(file)
+      }));
+      return [...prev, ...added];
+    });
+  }, []);
+
+  const removeComposerImage = useCallback((id: string) => {
+    setComposerImages((prev) => {
+      const target = prev.find((x) => x.id === id);
+      if (target) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((x) => x.id !== id);
+    });
+  }, []);
+  // Mirror the last-opened project in localStorage so the correct workspace is
+  // available on the very first render, before the async IPC probe resolves.
+  // Settings.json remains the source of truth written by the main process.
+  const [workingDirectory, setWorkingDirectoryState] = useState(
+    () => readLocalString(LAST_PROJECT_KEY) ?? ""
+  );
+  const setWorkingDirectory = useCallback((dir: string) => {
+    setWorkingDirectoryState(dir);
+    writeLocalString(LAST_PROJECT_KEY, dir || null);
+  }, []);
   const [recentProjects, setRecentProjects] = useState<string[]>([]);
   const [currentRun, setCurrentRun] = useState<PromptOutput | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Session tracking per project: { projectPath → { sessionId, messages } }
-  const sessionsRef = useRef<Map<string, { sessionId: string | null; messages: ChatMessage[] }>>(new Map());
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  // Session tracking per project: path → { sessionIds per agent, messages } (mirrored to localStorage)
+  const sessionsRef = useRef<Map<string, ProjectAgentState>>(loadAgentSessionsMap());
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => {
+    const wd = readLocalString(LAST_PROJECT_KEY) ?? "";
+    if (!wd) return [];
+    return sessionsRef.current.get(wd)?.messages ?? [];
+  });
 
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
 
   const [baseDirectory, setBaseDirectory] = useState<string | null>(null);
   const [sidebarNewProjectOpen, setSidebarNewProjectOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
+  const [selectedFramework, setSelectedFramework] = useState<Framework>("remotion");
   const [creatingProject, setCreatingProject] = useState(false);
   const [createStage, setCreateStage] = useState<"scaffold" | "install" | "player" | null>(null);
 
@@ -131,8 +280,16 @@ export function useAppState(api: NativeApi | undefined): AppState {
     try {
       const detected = await api.agents.detect();
       setAgents(detected);
-      const first = detected.find((a) => a.available);
-      if (first) setSelectedAgent(first.id);
+      // Preserve the user's persisted choice if it's still available. Only fall
+      // back to the first available agent when there is no prior selection or
+      // the previously chosen backend has vanished (e.g. uninstalled).
+      setSelectedAgentState((current) => {
+        if (current && detected.some((a) => a.id === current && a.available)) {
+          return current;
+        }
+        const first = detected.find((a) => a.available);
+        return first ? first.id : "";
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to detect agents.");
     }
@@ -164,7 +321,9 @@ export function useAppState(api: NativeApi | undefined): AppState {
     }
   }, [persistRecentProjects, workingDirectory]);
 
-  // Load persisted settings on mount
+  // Load persisted settings on mount. Settings.json owned by the main process is
+  // authoritative — if it disagrees with the localStorage mirror (e.g. a project
+  // was deleted in another window), we prefer the backend value.
   useEffect(() => {
     if (!api) return;
     void Promise.all([
@@ -172,9 +331,13 @@ export function useAppState(api: NativeApi | undefined): AppState {
       api.settings.getLastOpenedDirectory()
     ]).then(([base, last]) => {
       setBaseDirectory(base);
-      if (last) setWorkingDirectory(last);
+      if (last) {
+        setWorkingDirectory(last);
+        const restored = sessionsRef.current.get(last);
+        setChatMessages(restored?.messages ?? []);
+      }
     });
-  }, [api]);
+  }, [api, setWorkingDirectory]);
 
   // Detect agents on mount
   useEffect(() => {
@@ -187,12 +350,13 @@ export function useAppState(api: NativeApi | undefined): AppState {
     return api.prompt.onOutput((output) => {
       setCurrentRun(output);
 
-      // Save session ID when we get it
+      // Track server session id per agent while the run is in progress (in-memory only;
+      // full persistence happens when the run finishes).
       if (output.sessionId && workingDirectory) {
-        const session = sessionsRef.current.get(workingDirectory);
+        const prev = sessionsRef.current.get(workingDirectory);
         sessionsRef.current.set(workingDirectory, {
-          sessionId: output.sessionId,
-          messages: session?.messages ?? []
+          sessionIds: { ...prev?.sessionIds, [output.agentId]: output.sessionId },
+          messages: prev?.messages ?? []
         });
       }
 
@@ -203,12 +367,17 @@ export function useAppState(api: NativeApi | undefined): AppState {
         const newMessages = output.messages.slice(1);
         setChatMessages((prev) => {
           const merged = [...prev, ...newMessages];
-          // Save to session ref
           if (workingDirectory) {
+            const prevState = sessionsRef.current.get(workingDirectory);
+            const sessionIds = { ...prevState?.sessionIds };
+            if (output.sessionId) {
+              sessionIds[output.agentId] = output.sessionId;
+            }
             sessionsRef.current.set(workingDirectory, {
-              sessionId: output.sessionId,
+              sessionIds,
               messages: merged
             });
+            persistAgentSessionsMap(sessionsRef.current);
           }
           return merged;
         });
@@ -282,6 +451,23 @@ export function useAppState(api: NativeApi | undefined): AppState {
     setView("output");
   }, [workingDirectory]);
 
+  useEffect(() => {
+    setComposerImages((prev) => {
+      prev.forEach((x) => URL.revokeObjectURL(x.previewUrl));
+      return [];
+    });
+  }, [workingDirectory]);
+
+  const composerImagesRef = useRef(composerImages);
+  composerImagesRef.current = composerImages;
+  useEffect(() => {
+    return () => {
+      composerImagesRef.current.forEach((x) =>
+        URL.revokeObjectURL(x.previewUrl)
+      );
+    };
+  }, []);
+
   // Auto-switch to preview when agent completes and player is already running
   useEffect(() => {
     if (currentRun?.status === "completed" && currentRun.exitCode === 0 && playerRunning) {
@@ -297,15 +483,15 @@ export function useAppState(api: NativeApi | undefined): AppState {
 
   const setAndPersistDirectory = useCallback(
     async (dir: string) => {
-      // Save current project's chat state before switching
+      // Save current project's chat + session ids before switching
       if (workingDirectory) {
-        const currentSession = sessionsRef.current.get(workingDirectory);
-        if (currentRun?.sessionId || currentSession?.sessionId) {
-          sessionsRef.current.set(workingDirectory, {
-            sessionId: currentRun?.sessionId ?? currentSession?.sessionId ?? null,
-            messages: chatMessages
-          });
+        const prev = sessionsRef.current.get(workingDirectory);
+        const sessionIds = { ...prev?.sessionIds };
+        if (currentRun?.sessionId) {
+          sessionIds[currentRun.agentId] = currentRun.sessionId;
         }
+        sessionsRef.current.set(workingDirectory, { sessionIds, messages: chatMessages });
+        persistAgentSessionsMap(sessionsRef.current);
       }
 
       // Switch to new project
@@ -337,6 +523,13 @@ export function useAppState(api: NativeApi | undefined): AppState {
       );
       persistRecentProjects(nextProjects);
 
+      const sessionData = sessionsRef.current.get(dir);
+      if (sessionData) {
+        sessionsRef.current.delete(dir);
+        sessionsRef.current.set(renamedPath, sessionData);
+        persistAgentSessionsMap(sessionsRef.current);
+      }
+
       if (workingDirectory === dir) {
         setWorkingDirectory(renamedPath);
         await api.settings.setLastOpenedDirectory(renamedPath);
@@ -359,6 +552,9 @@ export function useAppState(api: NativeApi | undefined): AppState {
       }
 
       await api.fs.removePath(dir);
+
+      sessionsRef.current.delete(dir);
+      persistAgentSessionsMap(sessionsRef.current);
 
       const nextProjects = recentProjects.filter((projectPath) => projectPath !== dir);
       persistRecentProjects(nextProjects);
@@ -408,7 +604,7 @@ export function useAppState(api: NativeApi | undefined): AppState {
 
       // Run scaffold: copies template files + bun install
       setCreateStage("install");
-      const result = await api.project.init(created);
+      const result = await api.project.init(created, selectedFramework);
       if (!result.success) {
         setError(`Project setup failed: ${result.error}`);
         setCreatingProject(false);
@@ -426,7 +622,7 @@ export function useAppState(api: NativeApi | undefined): AppState {
       setCreatingProject(false);
       setCreateStage(null);
     }
-  }, [api, baseDirectory, newProjectName, setAndPersistDirectory]);
+  }, [api, baseDirectory, newProjectName, selectedFramework, setAndPersistDirectory]);
 
   const onChangeBaseDirectory = useCallback(async () => {
     if (!api) return;
@@ -456,6 +652,23 @@ export function useAppState(api: NativeApi | undefined): AppState {
     }
   }, [api, workingDirectory]);
 
+  const deleteComposition = useCallback(
+    async (compositionId: string) => {
+      if (!api || !workingDirectory) {
+        throw new Error("No project open.");
+      }
+      setError(null);
+      try {
+        await api.project.deleteComposition(workingDirectory, compositionId);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to delete composition.");
+        throw e;
+      }
+      await refreshCompositions();
+    },
+    [api, refreshCompositions, workingDirectory]
+  );
+
   const refreshRenderHistory = useCallback(async () => {
     if (!api || !workingDirectory) return;
     try {
@@ -475,6 +688,15 @@ export function useAppState(api: NativeApi | undefined): AppState {
       setError(e instanceof Error ? e.message : "Could not open video.");
     }
   }, [api]);
+
+  const fetchProjectFiles = useCallback(async () => {
+    if (!api || !workingDirectory) return [];
+    try {
+      return await api.project.listFiles(workingDirectory);
+    } catch {
+      return [];
+    }
+  }, [api, workingDirectory]);
 
   // Refresh composition file list from disk whenever preview is shown
   useEffect(() => {
@@ -520,49 +742,96 @@ export function useAppState(api: NativeApi | undefined): AppState {
     }
   }, [api, workingDirectory, playerRunning, refreshCompositions]);
 
-  const onSubmit = useCallback(async () => {
-    if (!api || !selectedAgent || !prompt.trim() || !workingDirectory) return;
-    setError(null);
-    setView("output");
+  const isRunning = currentRun?.status === "running";
 
-    // Get existing session for this project
-    const session = sessionsRef.current.get(workingDirectory);
-    const sessionId = session?.sessionId ?? undefined;
+  const runAgentPrompt = useCallback(
+    async (trimmedPrompt: string) => {
+      if (!api || !selectedAgent || !trimmedPrompt || !workingDirectory) return;
+      setError(null);
+      setView("output");
 
-    // Read system prompt from project (only needed for first prompt in session)
-    let systemPrompt: string | undefined;
-    if (!sessionId) {
-      try {
-        const sp = await api.project.readSystemPrompt(workingDirectory);
-        if (sp) systemPrompt = sp;
-      } catch {
-        // No system prompt is fine
+      const state = sessionsRef.current.get(workingDirectory);
+      const sessionId = state?.sessionIds[selectedAgent as AgentId];
+
+      let systemPrompt: string | undefined;
+      if (!sessionId && selectedAgent === "claude-code") {
+        try {
+          const sp = await api.project.readSystemPrompt(workingDirectory);
+          if (sp) systemPrompt = sp;
+        } catch {
+          /* no system prompt */
+        }
       }
-    }
 
-    // Add user message to chat immediately
-    const userMessage: ChatMessage = {
-      role: "user",
-      content: prompt.trim(),
-      timestamp: new Date().toISOString()
-    };
-    setChatMessages((prev) => [...prev, userMessage]);
-    setCurrentRun(null);
-    setPrompt("");
+      const userMessage: ChatMessage = {
+        role: "user",
+        content: trimmedPrompt,
+        timestamp: new Date().toISOString()
+      };
+      setChatMessages((prev) => [...prev, userMessage]);
+      setCurrentRun(null);
+      setPrompt("");
 
+      try {
+        const output = await api.prompt.run({
+          agentId: selectedAgent as AgentId,
+          prompt: trimmedPrompt,
+          workingDirectory,
+          systemPrompt,
+          sessionId
+        });
+        setCurrentRun(output);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to run prompt.");
+      }
+    },
+    [api, selectedAgent, workingDirectory]
+  );
+
+  const onSubmit = useCallback(async () => {
+    const trimmed = prompt.trim();
+    if (!api || !selectedAgent || !workingDirectory) return;
+    if (isRunning) return;
+    if (!trimmed && composerImages.length === 0) return;
+
+    setError(null);
+
+    const paths: string[] = [];
     try {
-      const output = await api.prompt.run({
-        agentId: selectedAgent as AgentId,
-        prompt: prompt.trim(),
-        workingDirectory,
-        systemPrompt,
-        sessionId
-      });
-      setCurrentRun(output);
+      for (const img of composerImages) {
+        const dataBase64 = await blobToBase64Payload(img.blob);
+        const { relativePath } = await api.project.writeClipboardAsset({
+          workingDirectory,
+          dataBase64,
+          mimeType: img.blob.type || "image/png"
+        });
+        paths.push(relativePath);
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to run prompt.");
+      setError(e instanceof Error ? e.message : "Failed to save images.");
+      return;
     }
-  }, [api, selectedAgent, prompt, workingDirectory]);
+
+    const pathsBlock = paths.join("\n");
+    let fullPrompt: string;
+    if (trimmed && paths.length) fullPrompt = `${trimmed}\n\n${pathsBlock}`;
+    else if (trimmed) fullPrompt = trimmed;
+    else fullPrompt = pathsBlock;
+
+    const toRevoke = [...composerImages];
+    toRevoke.forEach((x) => URL.revokeObjectURL(x.previewUrl));
+    setComposerImages([]);
+
+    await runAgentPrompt(fullPrompt);
+  }, [
+    api,
+    composerImages,
+    isRunning,
+    prompt,
+    runAgentPrompt,
+    selectedAgent,
+    workingDirectory
+  ]);
 
   const onStop = useCallback(async () => {
     if (!api || !currentRun) return;
@@ -572,6 +841,7 @@ export function useAppState(api: NativeApi | undefined): AppState {
   const onNewSession = useCallback(() => {
     if (workingDirectory) {
       sessionsRef.current.delete(workingDirectory);
+      persistAgentSessionsMap(sessionsRef.current);
     }
     setChatMessages([]);
     setCurrentRun(null);
@@ -599,8 +869,6 @@ export function useAppState(api: NativeApi | undefined): AppState {
     [api, workingDirectory, selectedComposition]
   );
 
-  const isRunning = currentRun?.status === "running";
-
   return {
     api,
     agents,
@@ -609,6 +877,12 @@ export function useAppState(api: NativeApi | undefined): AppState {
     detectAgents,
     prompt,
     setPrompt,
+    composerImages: composerImages.map(({ id, previewUrl }) => ({
+      id,
+      previewUrl
+    })),
+    addComposerImages,
+    removeComposerImage,
     workingDirectory,
     recentProjects,
     setAndPersistDirectory,
@@ -620,6 +894,8 @@ export function useAppState(api: NativeApi | undefined): AppState {
     setSidebarNewProjectOpen,
     newProjectName,
     setNewProjectName,
+    selectedFramework,
+    setSelectedFramework,
     creatingProject,
     createStage,
     onNewProject,
@@ -648,6 +924,8 @@ export function useAppState(api: NativeApi | undefined): AppState {
     onPreview,
     selectComposition: setSelectedComposition,
     refreshCompositions,
+    deleteComposition,
+    fetchProjectFiles,
     refreshRenderHistory,
     openOutputVideo,
     triggerRender,

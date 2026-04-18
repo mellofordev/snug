@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import type { NativeApi, PromptOutput, UpdateStatus, User } from "@acme/contracts";
+import { FRAMEWORKS, type Framework, type NativeApi, type PromptOutput, type UpdateStatus, type User } from "@acme/contracts";
 import { Add01Icon, ComputerIcon, Delete02Icon, Edit02Icon, FolderOpenIcon, FolderViewIcon, LogoutIcon, MenuIcon, Moon02Icon, SettingsIcon, SunIcon, UserIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 
@@ -63,6 +63,7 @@ interface SidePanelProps {
   baseDirectory: string | null;
   sidebarNewProjectOpen: boolean;
   newProjectName: string;
+  selectedFramework: Framework;
   creatingProject: boolean;
   createStage: "scaffold" | "install" | "player" | null;
   updateStatus: UpdateStatus | null;
@@ -75,6 +76,7 @@ interface SidePanelProps {
   onCreateProject: () => void;
   onChangeBaseDirectory: () => void;
   onSetNewProjectName: (name: string) => void;
+  onSetSelectedFramework: (framework: Framework) => void;
   onCloseSidebarNewProject: () => void;
   onLogout: () => void;
 }
@@ -89,6 +91,7 @@ export function SidePanel({
   baseDirectory,
   sidebarNewProjectOpen,
   newProjectName,
+  selectedFramework,
   creatingProject,
   createStage,
   updateStatus,
@@ -101,6 +104,7 @@ export function SidePanel({
   onCreateProject,
   onChangeBaseDirectory,
   onSetNewProjectName,
+  onSetSelectedFramework,
   onCloseSidebarNewProject,
   onLogout
 }: SidePanelProps) {
@@ -138,7 +142,7 @@ export function SidePanel({
                 className="inline-flex border  rounded-full h-5 w-5 min-h-5 min-w-5 max-h-5 max-w-5 shrink-0 items-center justify-center  p-0 text-muted-foreground shadow-none transition-colors hover:bg-muted/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label="Account menu"
               >
-                <HugeiconsIcon icon={UserIcon} size={14} strokeWidth={2} className="shrink-0" />
+                <HugeiconsIcon icon={UserIcon} size={10} strokeWidth={1} className="shrink-0" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-52">
                 <div className="px-2 py-1.5">
@@ -147,11 +151,11 @@ export function SidePanel({
                 </div>
                 <DropdownMenuSeparator />
                 <DropdownMenuSub>
-                  <DropdownMenuSubTrigger className="flex items-center gap-2"><HugeiconsIcon icon={SettingsIcon} size={14} strokeWidth={2} className="shrink-0" /> Settings</DropdownMenuSubTrigger>
+                  <DropdownMenuSubTrigger className="flex items-center gap-2"><HugeiconsIcon icon={SettingsIcon} size={10} strokeWidth={1} className="shrink-0" /> Settings</DropdownMenuSubTrigger>
                   <DropdownMenuSubContent className="min-w-44">
                     <DropdownMenuGroup>
                       <DropdownMenuLabel className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <HugeiconsIcon icon={SunIcon} size={14} strokeWidth={2} className="shrink-0" />
+                        <HugeiconsIcon icon={SunIcon} size={10} strokeWidth={1} className="shrink-0" />
                         <span>Theme</span>
                       </DropdownMenuLabel>
                       <DropdownMenuRadioGroup
@@ -163,15 +167,15 @@ export function SidePanel({
                         }}
                       >
                         <DropdownMenuRadioItem value="light" className="gap-2">
-                          <HugeiconsIcon icon={SunIcon} size={14} strokeWidth={2} className="shrink-0 text-muted-foreground" />
+                          <HugeiconsIcon icon={SunIcon} size={10} strokeWidth={1} className="shrink-0 text-muted-foreground" />
                           <span>Light</span>
                         </DropdownMenuRadioItem>
                         <DropdownMenuRadioItem value="dark" className="gap-2">
-                          <HugeiconsIcon icon={Moon02Icon} size={14} strokeWidth={2} className="shrink-0 text-muted-foreground" />
+                          <HugeiconsIcon icon={Moon02Icon} size={10} strokeWidth={1} className="shrink-0 text-muted-foreground" />
                           <span>Dark</span>
                         </DropdownMenuRadioItem>
                         <DropdownMenuRadioItem value="system" className="gap-2">
-                          <HugeiconsIcon icon={ComputerIcon} size={14} strokeWidth={2} className="shrink-0 text-muted-foreground" />
+                          <HugeiconsIcon icon={ComputerIcon} size={10} strokeWidth={1} className="shrink-0 text-muted-foreground" />
                           <span>System</span>
                         </DropdownMenuRadioItem>
                       </DropdownMenuRadioGroup>
@@ -179,7 +183,7 @@ export function SidePanel({
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={onLogout} className="flex items-center gap-2"><HugeiconsIcon icon={LogoutIcon} size={14} strokeWidth={2} className="shrink-0" /> Log out</DropdownMenuItem>
+                <DropdownMenuItem onClick={onLogout} className="flex items-center gap-2"><HugeiconsIcon icon={LogoutIcon} size={10} strokeWidth={1} className="shrink-0" /> Log out</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -282,12 +286,14 @@ export function SidePanel({
             open={sidebarNewProjectOpen}
             baseDirectory={baseDirectory}
             projectName={newProjectName}
+            framework={selectedFramework}
             creating={creatingProject}
             createStage={createStage}
             isRunning={isRunning}
             onOpen={onNewProject}
             onClose={onCloseSidebarNewProject}
             onSetName={onSetNewProjectName}
+            onSetFramework={onSetSelectedFramework}
             onChangeBase={onChangeBaseDirectory}
             onCreate={onCreateProject}
           />
@@ -332,26 +338,35 @@ interface NewProjectDialogProps {
   open: boolean;
   baseDirectory: string | null;
   projectName: string;
+  framework: Framework;
   creating: boolean;
   createStage: "scaffold" | "install" | "player" | null;
   isRunning: boolean;
   onOpen: () => void;
   onClose: () => void;
   onSetName: (name: string) => void;
+  onSetFramework: (framework: Framework) => void;
   onChangeBase: () => void;
   onCreate: () => void;
 }
+
+const FRAMEWORK_LABEL: Record<Framework, string> = {
+  remotion: "Remotion",
+  hyperframes: "Hyperframes"
+};
 
 function NewProjectDialog({
   open,
   baseDirectory,
   projectName,
+  framework,
   creating,
   createStage,
   isRunning,
   onOpen,
   onClose,
   onSetName,
+  onSetFramework,
   onChangeBase,
   onCreate
 }: NewProjectDialogProps) {
@@ -413,6 +428,24 @@ function NewProjectDialog({
           onKeyDown={(e) => { if (e.key === "Enter" && baseDirectory) onCreate(); }}
           autoFocus
         />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label className="text-xs font-normal">Framework</Label>
+          <div className="flex gap-2">
+            {FRAMEWORKS.map((fw) => (
+              <Button
+                key={fw}
+                type="button"
+                variant={framework === fw ? "default" : "outline"}
+                size="sm"
+                className="flex-1"
+                onClick={() => onSetFramework(fw)}
+                disabled={creating}
+              >
+                {FRAMEWORK_LABEL[fw]}
+              </Button>
+            ))}
+          </div>
         </div>
         <DialogFooter className="flex-col items-stretch gap-2 sm:flex-col">
           {createStage && (

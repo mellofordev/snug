@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from "electro
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
-import { promptInputSchema } from "@acme/contracts";
+import { isFramework, projectWriteClipboardAssetSchema, promptInputSchema } from "@acme/contracts";
 
 import { IPC_CHANNELS } from "./ipcChannels";
 import { detectAgents, runPrompt, stopPrompt } from "./agentManager";
@@ -15,7 +15,10 @@ import {
   renderComposition,
   listCompositions,
   listOutputs,
-  readSystemPrompt
+  readSystemPrompt,
+  writeClipboardAsset,
+  deleteComposition,
+  listProjectFilesForMention
 } from "./projectManager";
 import { SettingsStore } from "./settingsStore";
 import { initAutoUpdater, checkForUpdate, downloadUpdate, installUpdate } from "./updateManager";
@@ -189,9 +192,10 @@ function registerIpcHandlers(): void {
 
   // ── Project handlers ──────────────────────────────────────────────
 
-  ipcMain.handle(IPC_CHANNELS.projectInit, async (_event, dir: unknown) => {
+  ipcMain.handle(IPC_CHANNELS.projectInit, async (_event, dir: unknown, framework: unknown) => {
     if (typeof dir !== "string") throw new Error("Invalid directory");
-    return initProject(dir);
+    if (!isFramework(framework)) throw new Error("Invalid framework");
+    return initProject(dir, framework);
   });
 
   ipcMain.handle(IPC_CHANNELS.projectStartPlayer, async (_event, dir: unknown) => {
@@ -225,9 +229,33 @@ function registerIpcHandlers(): void {
     return listCompositions(dir);
   });
 
+  ipcMain.handle(
+    IPC_CHANNELS.projectDeleteComposition,
+    async (_event, dir: unknown, compositionId: unknown) => {
+      if (typeof dir !== "string" || typeof compositionId !== "string") {
+        throw new Error("Invalid arguments");
+      }
+      return deleteComposition(dir, compositionId);
+    }
+  );
+
   ipcMain.handle(IPC_CHANNELS.projectReadSystemPrompt, async (_event, dir: unknown) => {
     if (typeof dir !== "string") throw new Error("Invalid directory");
     return readSystemPrompt(dir);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.projectWriteClipboardAsset, async (_event, payload: unknown) => {
+    const input = projectWriteClipboardAssetSchema.parse(payload);
+    return writeClipboardAsset(
+      input.workingDirectory,
+      input.dataBase64,
+      input.mimeType
+    );
+  });
+
+  ipcMain.handle(IPC_CHANNELS.projectListFiles, async (_event, dir: unknown) => {
+    if (typeof dir !== "string") throw new Error("Invalid directory");
+    return listProjectFilesForMention(dir);
   });
 
   // ── Auth handlers ─────────────────────────────────────────────────

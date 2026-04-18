@@ -4,7 +4,9 @@ import type { RenderHistoryItem, RenderProgress } from "@acme/contracts";
 import {
   ArrowDown01Icon,
   ArrowLeft02Icon,
+  Delete02Icon,
   History,
+  Tick02Icon,
   Video01Icon
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -17,8 +19,6 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
@@ -43,6 +43,8 @@ interface VideoPreviewProps {
   onSelectComposition: (id: string) => void;
   /** Called when the composition dropdown opens — refresh list from disk (IPC). */
   onCompositionMenuOpen?: () => void;
+  /** Delete a composition's `.tsx` file from `compositions/` (confirmed in UI). */
+  onDeleteComposition?: (compositionId: string) => void | Promise<void>;
   /** Refresh render output list when the past-renders menu opens. */
   onRenderHistoryMenuOpen?: () => void;
   /** Open an exported video in the OS default app (e.g. QuickTime). */
@@ -59,6 +61,7 @@ export function VideoPreview({
   renderHistory,
   onSelectComposition,
   onCompositionMenuOpen,
+  onDeleteComposition,
   onRenderHistoryMenuOpen,
   onOpenOutputVideo,
   onRender,
@@ -79,7 +82,11 @@ export function VideoPreview({
   const postSelectCompositionToIframe = () => {
     const id = effectiveCompositionIdRef.current;
     const win = iframeRef.current?.contentWindow;
-    if (!id || !win) return;
+    if (!id || !win) {
+      console.log("[snug/preview] postSelectComposition skipped", { id, hasWin: !!win });
+      return;
+    }
+    console.log("[snug/preview] -> selectComposition", id);
     win.postMessage({ type: "selectComposition", id }, "*");
   };
 
@@ -87,6 +94,22 @@ export function VideoPreview({
   useEffect(() => {
     postSelectCompositionToIframe();
   }, [effectiveCompositionId]);
+
+  // The iframe's `load` event fires before React mounts inside it, so our very
+  // first `postMessage` can race the player's `window.message` listener. Listen
+  // for the player's own `ready` / `compositions` handshake and (re-)post the
+  // current selection as soon as it's guaranteed to be received.
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      const data = event.data;
+      if (!data || data.source !== "snug-player") return;
+      if (data.type === "ready" || data.type === "compositions") {
+        postSelectCompositionToIframe();
+      }
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, []);
 
   useEffect(() => {
     const previousStatus = previousRenderStatusRef.current;
@@ -179,18 +202,61 @@ export function VideoPreview({
                   <DropdownMenuLabel>Composition</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   {compositions.length > 0 ? (
-                    <DropdownMenuRadioGroup
-                      value={effectiveCompositionId}
-                      onValueChange={(id) => {
-                        if (id) onSelectComposition(id);
-                      }}
-                    >
+                    <>
                       {compositions.map((c) => (
-                        <DropdownMenuRadioItem key={c.id} value={c.id}>
-                          {c.id}
-                        </DropdownMenuRadioItem>
+                        <DropdownMenuItem
+                          key={c.id}
+                          className="flex items-center justify-between gap-1.5 pr-1"
+                          onSelect={(e) => {
+                            e.preventDefault();
+                            onSelectComposition(c.id);
+                          }}
+                        >
+                          <span className="flex min-w-0 flex-1 items-center gap-2">
+                            {effectiveCompositionId === c.id ? (
+                              <HugeiconsIcon
+                                icon={Tick02Icon}
+                                size={12}
+                                strokeWidth={2}
+                                className="shrink-0 text-foreground"
+                              />
+                            ) : (
+                              <span className="inline-block w-3 shrink-0" aria-hidden />
+                            )}
+                            <span className="truncate">{c.id}</span>
+                          </span>
+                          {onDeleteComposition && (
+                            <button
+                              type="button"
+                              title="Delete composition"
+                              className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                              onPointerDown={(e) => e.stopPropagation()}
+                              onClick={async (e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if (
+                                  !confirm(
+                                    `Delete composition "${c.id}"? The source file will be removed from this project. This cannot be undone.`
+                                  )
+                                ) {
+                                  return;
+                                }
+                                try {
+                                  await onDeleteComposition(c.id);
+                                  toast.success("Composition deleted", {
+                                    description: c.id
+                                  });
+                                } catch {
+                                  /* error shown in app chrome */
+                                }
+                              }}
+                            >
+                              <HugeiconsIcon icon={Delete02Icon} size={13} strokeWidth={2} />
+                            </button>
+                          )}
+                        </DropdownMenuItem>
                       ))}
-                    </DropdownMenuRadioGroup>
+                    </>
                   ) : (
                     <DropdownMenuItem disabled>No compositions found</DropdownMenuItem>
                   )}

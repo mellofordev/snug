@@ -1,6 +1,6 @@
 {
   "name": "@acme/desktop",
-  "version": "0.1.1",
+  "version": "3.0.3",
   "private": true,
   "description": "Snug — Electron shell for Remotion + agent workflows",
   "author": "Snug",
