@@ -122,6 +122,7 @@ export default function App() {
                 onOpenOutputVideo={(p) => void state.openOutputVideo(p)}
                 onRender={(id) => void state.triggerRender(id)}
                 onBack={state.switchToOutput}
+                onStopPlayer={() => void state.stopPlayer()}
               />
             ) : (
               <ChatViewer currentRun={state.currentRun} chatMessages={state.chatMessages} isRunning={state.isRunning} />
