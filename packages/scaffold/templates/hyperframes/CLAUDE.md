@@ -46,7 +46,9 @@ looks like:
 <html>
   <head>
     <meta name="viewport" content="width=1920, height=1080" />
+    <!-- GSAP first, then the HyperFrames runtime (order matters). -->
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@hyperframes/core/dist/hyperframe.runtime.iife.js"></script>
     <style>
       html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #000; }
       #root { position: relative; width: 100%; height: 100%; }
