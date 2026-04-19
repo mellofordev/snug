@@ -1,18 +1,17 @@
 <!doctype html>
-<html>
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=1920, height=1080" />
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
     <style>
-      html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #0a0a0a; }
-      #root { position: relative; width: 100%; height: 100%; }
-      #title {
-        position: absolute; inset: 0;
-        display: flex; align-items: center; justify-content: center;
-        color: #fff;
-        font: 700 120px system-ui, -apple-system, sans-serif;
-        letter-spacing: -0.02em;
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #0a0a0a;
       }
     </style>
   </head>
@@ -24,18 +23,35 @@
       data-duration="5"
       data-width="1920"
       data-height="1080"
-      data-fps="30"
     >
-      <div id="title">Hello World</div>
+      <div
+        id="title"
+        class="clip"
+        data-start="0"
+        data-duration="5"
+        data-track-index="0"
+        style="
+          position: absolute;
+          inset: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: #fff;
+          font: 700 120px system-ui, -apple-system, sans-serif;
+          letter-spacing: -0.02em;
+        "
+      >Hello World</div>
     </div>
     <script>
       window.__timelines = window.__timelines || {};
       const tl = gsap.timeline({ paused: true });
-      // Fade/scale in over 1s, then hold for 4s. Total duration must match data-duration.
+      // Gentle scale pulse. Important: do NOT start the animation from
+      // opacity: 0 — a paused timeline sits at t=0, which would pin the
+      // clip invisible until the user hits play.
       tl.fromTo(
         "#title",
-        { opacity: 0, scale: 0.8 },
-        { opacity: 1, scale: 1, duration: 1, ease: "power2.out" }
+        { scale: 0.95 },
+        { scale: 1, duration: 1, ease: "power2.out" }
       );
       tl.to({}, { duration: 4 });
       window.__timelines["HelloWorld"] = tl;
