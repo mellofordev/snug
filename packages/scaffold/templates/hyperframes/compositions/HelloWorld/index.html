@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #0a0a0a; }
+      #root { position: relative; width: 100%; height: 100%; }
+      .title {
+        position: absolute; inset: 0;
+        display: flex; align-items: center; justify-content: center;
+        color: #fff;
+        font: 700 120px system-ui, -apple-system, sans-serif;
+        letter-spacing: -0.02em;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="HelloWorld"
+      data-start="0"
+      data-duration="5"
+      data-width="1920"
+      data-height="1080"
+      data-fps="30"
+    >
+      <div
+        id="title"
+        class="clip title"
+        data-start="0"
+        data-duration="5"
+        data-track-index="0"
+      >Hello World</div>
+    </div>
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+      tl.from("#title", { opacity: 0, scale: 0.8, duration: 1, ease: "power2.out" });
+      window.__timelines["HelloWorld"] = tl;
+    </script>
+  </body>
+</html>

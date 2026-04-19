@@ -23,12 +23,41 @@ function resourcePathForExec(absPath: string): string {
 
 const resolvedRenderScript = resourcePathForExec(RENDER_SCRIPT);
 
-/** Canonical Remotion scripts for Snug projects (matches API-delivered scaffold template). */
-const DEFAULT_SCAFFOLD_SCRIPTS = {
-  player: "vite",
-  studio: "remotion studio",
-  render: "remotion render"
-} as const;
+/** Canonical scripts per framework (match the scaffold templates under `packages/scaffold/templates/<framework>/`). */
+const DEFAULT_SCAFFOLD_SCRIPTS: Record<Framework, Record<"player" | "studio" | "render", string>> = {
+  remotion: {
+    player: "vite",
+    studio: "remotion studio",
+    render: "remotion render"
+  },
+  hyperframes: {
+    player: "vite",
+    studio: "hyperframes preview",
+    render: "hyperframes render"
+  }
+};
+
+/**
+ * Detect the project's framework from its package.json dependencies. Used by
+ * render/preview/list because the `Framework` is only recorded in the IPC at init
+ * time — at run time we inspect the installed deps. Falls back to `"remotion"` so
+ * existing projects (created before hyperframes support) keep working unchanged.
+ */
+function detectFramework(root: string): Framework {
+  const pkgPath = path.join(root, "package.json");
+  if (!existsSync(pkgPath)) return "remotion";
+  try {
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+    const all = { ...pkg.dependencies, ...pkg.devDependencies };
+    if (all["hyperframes"] || all["@hyperframes/player"]) return "hyperframes";
+    return "remotion";
+  } catch {
+    return "remotion";
+  }
+}
 
 // ── Template source (GitHub tarball) ────────────────────────────────────
 // Fetched from the monorepo on project init — no API, no R2. Templates are
@@ -292,7 +321,7 @@ function extractDevServerUrl(buffer: string): string | null {
   return m ? m[0].replace(/\/$/, "") : null;
 }
 
-/** If package.json is missing scaffold scripts (e.g. partial init), merge canonical defaults. */
+/** If package.json is missing scaffold scripts (e.g. partial init), merge canonical defaults for the detected framework. */
 function mergeDefaultScaffoldScripts(root: string): void {
   const pkgPath = path.join(root, "package.json");
   if (!existsSync(pkgPath)) return;
@@ -304,12 +333,13 @@ function mergeDefaultScaffoldScripts(root: string): void {
     return;
   }
 
+  const defaults = DEFAULT_SCAFFOLD_SCRIPTS[detectFramework(root)];
   const keys = ["player", "studio", "render"] as const;
   let changed = false;
   pkg.scripts = pkg.scripts ?? {};
   for (const k of keys) {
-    const v = DEFAULT_SCAFFOLD_SCRIPTS[k];
-    if (typeof v === "string" && v.trim() && !pkg.scripts[k]?.trim()) {
+    const v = defaults[k];
+    if (v.trim() && !pkg.scripts[k]?.trim()) {
       pkg.scripts[k] = v;
       changed = true;
     }
@@ -517,8 +547,22 @@ export function stopAllPlayers(): void {
 export async function listCompositions(dir: string): Promise<CompositionFile[]> {
   const root = resolveProjectRoot(dir);
   const compositionsDir = path.join(root, "compositions");
+  const framework = detectFramework(root);
   try {
     const entries = await fs.readdir(compositionsDir, { withFileTypes: true });
+    if (framework === "hyperframes") {
+      // Each composition is a directory containing `index.html`.
+      const results: CompositionFile[] = [];
+      for (const e of entries) {
+        if (!e.isDirectory()) continue;
+        const indexPath = path.join(compositionsDir, e.name, "index.html");
+        if (existsSync(indexPath)) {
+          results.push({ name: e.name, path: indexPath });
+        }
+      }
+      return results;
+    }
+    // Remotion: `compositions/<id>.tsx`.
     return entries
       .filter((e) => e.isFile() && e.name.endsWith(".tsx"))
       .map((e) => ({
@@ -539,19 +583,27 @@ export async function deleteComposition(
   if (!id) {
     throw new Error("Invalid composition name.");
   }
+  const framework = detectFramework(root);
   const files = await listCompositions(dir);
   const match = files.find((f) => f.name === id);
   if (!match) {
     throw new Error("Composition not found.");
   }
   const compositionsDir = path.resolve(path.join(root, "compositions"));
-  const resolvedFile = path.resolve(match.path);
-  const relativeToCompositions = path.relative(compositionsDir, resolvedFile);
+  // For hyperframes we remove the whole composition directory; for remotion just the .tsx file.
+  const resolvedTarget = path.resolve(
+    framework === "hyperframes" ? path.join(compositionsDir, id) : match.path
+  );
+  const relativeToCompositions = path.relative(compositionsDir, resolvedTarget);
   if (relativeToCompositions.startsWith("..") || path.isAbsolute(relativeToCompositions)) {
     throw new Error("Invalid composition path.");
   }
   try {
-    await fs.unlink(resolvedFile);
+    if (framework === "hyperframes") {
+      await fs.rm(resolvedTarget, { recursive: true, force: false });
+    } else {
+      await fs.unlink(resolvedTarget);
+    }
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "ENOENT") {
@@ -646,7 +698,8 @@ export async function renderComposition(
 
   onProgress({ status: "rendering", progress: 0 });
 
-  const child = spawn("bash", [resolvedRenderScript, root, compositionId, outputPath], {
+  const framework = detectFramework(root);
+  const child = spawn("bash", [resolvedRenderScript, root, compositionId, outputPath, framework], {
     env: buildEnv(),
     stdio: ["ignore", "pipe", "pipe"]
   });
