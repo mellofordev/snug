@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
 import "@hyperframes/player";
-import "./types";
 
 /**
  * Each composition lives at `compositions/<id>/index.html`. We load two views:
