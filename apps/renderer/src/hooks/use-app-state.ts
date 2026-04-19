@@ -183,6 +183,7 @@ export interface AppState {
   openOutputVideo: (filePath: string) => Promise<void>;
   triggerRender: (compositionId?: string) => Promise<void>;
   startPlayer: () => Promise<void>;
+  stopPlayer: () => Promise<void>;
 }
 
 export function useAppState(api: NativeApi | undefined): AppState {
@@ -720,6 +721,18 @@ export function useAppState(api: NativeApi | undefined): AppState {
     }
   }, [api, workingDirectory, refreshCompositions]);
 
+  const stopPlayer = useCallback(async () => {
+    if (!api || !workingDirectory) return;
+    try {
+      await api.project.stopPlayer(workingDirectory);
+    } catch {
+      /* swallow — player may already be stopped */
+    }
+    setPlayerRunning(false);
+    setPlayerUrl("");
+    setView("output");
+  }, [api, workingDirectory]);
+
   const onPreview = useCallback(async () => {
     if (!api || !workingDirectory) return;
     if (playerRunning) {
@@ -929,6 +942,7 @@ export function useAppState(api: NativeApi | undefined): AppState {
     refreshRenderHistory,
     openOutputVideo,
     triggerRender,
-    startPlayer
+    startPlayer,
+    stopPlayer
   };
 }

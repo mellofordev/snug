@@ -1,15 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 import type { RenderHistoryItem, RenderProgress } from "@acme/contracts";
-import {
-  ArrowDown01Icon,
-  ArrowLeft02Icon,
-  Delete02Icon,
-  History,
-  Tick02Icon,
-  Video01Icon
-} from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
+import { ChevronDown, ChevronLeft, Trash2, History, Check, Video, Square } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -51,6 +43,8 @@ interface VideoPreviewProps {
   onOpenOutputVideo: (filePath: string) => void;
   onRender: (compositionId?: string) => void;
   onBack: () => void;
+  /** Stop the dev player process (also exits preview view). */
+  onStopPlayer: () => void;
 }
 
 export function VideoPreview({
@@ -65,7 +59,8 @@ export function VideoPreview({
   onRenderHistoryMenuOpen,
   onOpenOutputVideo,
   onRender,
-  onBack
+  onBack,
+  onStopPlayer
 }: VideoPreviewProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const effectiveCompositionIdRef = useRef(selectedComposition);
@@ -118,7 +113,7 @@ export function VideoPreview({
     if (previousStatus === "rendering" && nextStatus === "completed") {
       toast.success("Render completed", {
         description: "View it from render history.",
-        icon: <HugeiconsIcon icon={History} size={14} />,
+        icon: <History size={14} />,
         action: {
           label: "View history",
           onClick: () => {
@@ -142,7 +137,10 @@ export function VideoPreview({
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
       {/* Replaces the project TopBar while preview is open */}
-      <header className="relative flex h-[38px] shrink-0 items-center px-5" style={dragRegion}>
+      <header
+        className="relative flex h-[38px] shrink-0 items-center px-5 animate-in fade-in-0 duration-200 ease-out-strong"
+        style={dragRegion}
+      >
         <div className="flex min-w-0 items-center gap-2.5">
           <Button
             variant="ghost"
@@ -151,11 +149,9 @@ export function VideoPreview({
             className="h-6 gap-1 px-2 text-sm"
             style={noDrag}
           >
-            <HugeiconsIcon icon={ArrowLeft02Icon} size={13} />
+            <ChevronLeft className="size-3.5" />
             Output
           </Button>
-
-          <div className="h-4 w-px shrink-0 bg-border/70" style={noDrag} />
         </div>
 
         <div
@@ -191,8 +187,7 @@ export function VideoPreview({
                 <span className="truncate text-left">
                   {effectiveCompositionId || "Open menu to load…"}
                 </span>
-                <HugeiconsIcon
-                  icon={ArrowDown01Icon}
+                <ChevronDown
                   size={11}
                   className="shrink-0 opacity-50"
                 />
@@ -214,8 +209,7 @@ export function VideoPreview({
                         >
                           <span className="flex min-w-0 flex-1 items-center gap-2">
                             {effectiveCompositionId === c.id ? (
-                              <HugeiconsIcon
-                                icon={Tick02Icon}
+                              <Check
                                 size={12}
                                 strokeWidth={2}
                                 className="shrink-0 text-foreground"
@@ -251,7 +245,7 @@ export function VideoPreview({
                                 }
                               }}
                             >
-                              <HugeiconsIcon icon={Delete02Icon} size={13} strokeWidth={2} />
+                              <Trash2 size={13} strokeWidth={2} />
                             </button>
                           )}
                         </DropdownMenuItem>
@@ -267,6 +261,19 @@ export function VideoPreview({
         </div>
 
         <div className="ml-auto flex min-w-0 items-center gap-1.5" style={noDrag}>
+
+        <Button
+            variant="ghost"
+            size="xs"
+            onClick={onStopPlayer}
+            disabled={isRendering}
+            title="Stop the dev player and return to output"
+            className="font-extralight text-xs"
+            style={noDrag}
+          >
+            <Square className="size-3.5 text-red-300" />
+            Stop preview
+          </Button>
           <DropdownMenu
             open={historyMenuOpen}
             onOpenChange={(open) => {
@@ -275,40 +282,47 @@ export function VideoPreview({
             }}
           >
             <DropdownMenuTrigger
-              disabled={renderHistory.length === 0}
               aria-label="Past renders"
               className={cn(
-                buttonVariants({ variant: "ghost", size: "icon-sm" }),
-                "size-7 shrink-0 [&_svg]:size-3.5"
+                buttonVariants({ variant: "ghost", size: "xs" }),
+                "font-extralight text-xs"
               )}
               style={noDrag}
             >
-              <HugeiconsIcon icon={History} size={13} />
+              <History className="size-3.5" />
+              History
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-52 max-h-64 overflow-y-auto">
               <DropdownMenuGroup>
                 <DropdownMenuLabel>Past renders</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                {renderHistory.map((item) => (
-                  <DropdownMenuItem
-                    key={item.path}
-                    onClick={() => onOpenOutputVideo(item.path)}
-                  >
-                    <span className="truncate font-mono text-xs">{item.name}</span>
+                {renderHistory.length > 0 ? (
+                  renderHistory.map((item) => (
+                    <DropdownMenuItem
+                      key={item.path}
+                      onClick={() => onOpenOutputVideo(item.path)}
+                    >
+                      <span className="truncate font-mono text-xs">{item.name}</span>
+                    </DropdownMenuItem>
+                  ))
+                ) : (
+                  <DropdownMenuItem disabled>
+                    <span className="text-xs text-muted-foreground">No renders yet</span>
                   </DropdownMenuItem>
-                ))}
+                )}
               </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
 
+
           <Button
-            size="sm"
+            size="xs"
+            className="font-extralight text-xs"
             disabled={!effectiveCompositionId || isRendering}
             onClick={() => onRender(effectiveCompositionId)}
-            className="h-7 shrink-0 gap-1 px-3 text-sm"
             style={noDrag}
           >
-            <HugeiconsIcon icon={Video01Icon} size={13} />
+            <Video className="size-3.5" />
             Render
           </Button>
         </div>
@@ -316,7 +330,9 @@ export function VideoPreview({
 
       {/* Player — inset from chrome and composer */}
       <div className="flex min-h-0 flex-1 flex-col bg-background px-4 pb-4 pt-3">
-        <div className="relative min-h-0 flex-1 overflow-hidden rounded-[calc(var(--radius)+6px)] bg-black shadow-sm ring-1 ring-border/40">
+        <div
+          className="relative min-h-0 flex-1 origin-top overflow-hidden rounded-[calc(var(--radius)+6px)] bg-black shadow-sm ring-1 ring-border/40 animate-in fade-in-0 motion-safe:zoom-in-[0.97] duration-[320ms] ease-drawer"
+        >
           <iframe
             ref={iframeRef}
             src={playerUrl}

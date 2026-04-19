@@ -1,6 +1,5 @@
 import type { UpdateStatus } from "@acme/contracts";
-import { ArrowReloadHorizontalIcon, Cancel01Icon, Download04Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
+import { RefreshCw, X, Download } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -28,7 +27,7 @@ export function UpdateBanner({ status, onDismiss, onInstall }: UpdateBannerProps
       <Card size="sm" className="gap-2 py-2.5 px-0">
         <CardHeader className="gap-1 px-3">
           <div className="flex items-center gap-2">
-            <HugeiconsIcon icon={Download04Icon} size={14} strokeWidth={2} className="shrink-0 text-destructive" />
+            <Download size={14} strokeWidth={2} className="shrink-0 text-destructive" />
             <CardTitle className="text-xs">Update failed</CardTitle>
           </div>
           <CardAction>
@@ -38,7 +37,7 @@ export function UpdateBanner({ status, onDismiss, onInstall }: UpdateBannerProps
               className="rounded-sm p-0.5 text-muted-foreground/50 transition-colors hover:text-foreground"
               aria-label="Dismiss"
             >
-              <HugeiconsIcon icon={Cancel01Icon} size={12} />
+              <X size={12} />
             </button>
           </CardAction>
           <CardDescription className="text-[11px] leading-snug">{status.message}</CardDescription>
@@ -56,7 +55,7 @@ export function UpdateBanner({ status, onDismiss, onInstall }: UpdateBannerProps
         </CardHeader>
         <CardContent>
           <Button size="sm" className="w-full" onClick={onInstall}>
-          <HugeiconsIcon icon={ArrowReloadHorizontalIcon} size={14} strokeWidth={2} /> Restart &amp; update
+          <RefreshCw size={14} strokeWidth={2} /> Restart &amp; update
           </Button>
         </CardContent>
       </Card>
@@ -71,7 +70,7 @@ export function UpdateBanner({ status, onDismiss, onInstall }: UpdateBannerProps
     <Card size="sm" className="gap-2 py-2.5 px-0">
       <CardHeader className="gap-1 px-3">
         <div className="flex items-center gap-2">
-          <HugeiconsIcon icon={Download04Icon} size={14} strokeWidth={2} className="shrink-0 animate-pulse text-muted-foreground" />
+          <Download size={14} strokeWidth={2} className="shrink-0 animate-pulse text-muted-foreground" />
           <CardTitle className="text-xs">
             {pct !== null ? `Downloading… ${pct}%` : `Downloading${version ? ` v${version}` : ""}…`}
           </CardTitle>
@@ -83,7 +82,7 @@ export function UpdateBanner({ status, onDismiss, onInstall }: UpdateBannerProps
             className="rounded-sm p-0.5 text-muted-foreground/50 transition-colors hover:text-foreground"
             aria-label="Dismiss"
           >
-            <HugeiconsIcon icon={Cancel01Icon} size={12} />
+            <X size={12} />
           </button>
         </CardAction>
         <CardDescription className="text-[11px] leading-snug">This runs in the background.</CardDescription>

@@ -1,11 +1,5 @@
 import type { Agent, AgentId } from "@acme/contracts";
-import {
-  ArrowDown01Icon,
-  PlayIcon,
-  Rocket01FreeIcons,
-  StopIcon
-} from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
+import { ChevronDown, Play, Rocket, Square, X } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -346,7 +340,8 @@ export function Composer({
     <div className="shrink-0 px-5 pt-3 pb-3">
       <div
         className={cn(
-          "rounded-[calc(var(--radius)+8px)] bg-muted/50 ring-1 ring-border/60 transition-shadow",
+          "relative rounded-[calc(var(--radius)+8px)] bg-muted/50 ring-1 ring-border/60 shadow-xs/5 transition-shadow",
+          "before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius)+7px)] before:shadow-[0_1px_--theme(--color-black/4%)] dark:before:shadow-[0_-1px_--theme(--color-white/6%)]",
           dropHover && canAttach && "ring-2 ring-primary/35"
         )}
         onDragEnter={(e) => {
@@ -391,7 +386,7 @@ export function Composer({
                     title="Remove"
                   >
                     <span className="flex size-5 items-center justify-center rounded-full bg-background/90 text-xs leading-none text-foreground shadow-sm ring-1 ring-border">
-                      ×
+                      <X size={12} />
                     </span>
                   </button>
                 )}
@@ -527,7 +522,7 @@ export function Composer({
                 />
               )}
               {selectedAgentName ?? "Agent"}
-              <HugeiconsIcon icon={ArrowDown01Icon} size={12} className="opacity-50" />
+              <ChevronDown size={12} className="opacity-50" />
             </DropdownMenuTrigger>
             <DropdownMenuContent side="top" align="start" sideOffset={8}>
               <DropdownMenuGroup>
@@ -577,8 +572,8 @@ export function Composer({
             <div className="flex min-w-0 items-center gap-2 pl-1">
               <Button
                 variant="ghost"
-                size="sm"
-                className="h-7 gap-1.5 px-2.5 text-xs"
+                size={"xs"}
+                className="font-extralight"
                 disabled={playerStarting}
                 title={
                   playerRunning && !playerStarting
@@ -593,13 +588,13 @@ export function Composer({
                     aria-hidden
                   />
                 ) : (
-                  <HugeiconsIcon icon={PlayIcon} size={14} />
+                  <Play className="size-3.5" />
                 )}
                 {playerStarting ? "Starting…" : "Preview"}
               </Button>
               {playerStarting && (
                 <span className="hidden truncate text-[10px] text-muted-foreground sm:inline">
-                  Starting Remotion player…
+                  Starting player…
                 </span>
               )}
             </div>
@@ -614,7 +609,7 @@ export function Composer({
                 onClick={onStop}
                 title="Stop"
               >
-                <HugeiconsIcon icon={StopIcon} size={14} />
+                <Square size={14} />
               </Button>
             ) : (
               <Button
@@ -623,8 +618,7 @@ export function Composer({
                 onClick={onSubmit}
                 title="Run agent (⌘ Enter)"
               >
-                <HugeiconsIcon icon={Rocket01FreeIcons} size={14} />
-                Generate video
+                Generate
               </Button>
             )}
           </div>

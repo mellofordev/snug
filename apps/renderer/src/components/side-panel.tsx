@@ -1,8 +1,7 @@
 import * as React from "react";
 
 import { FRAMEWORKS, type Framework, type NativeApi, type PromptOutput, type UpdateStatus, type User } from "@acme/contracts";
-import { Add01Icon, ComputerIcon, Delete02Icon, Edit02Icon, FolderOpenIcon, FolderViewIcon, LogoutIcon, MenuIcon, Moon02Icon, SettingsIcon, SunIcon, UserIcon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
+import { Plus, Monitor, Trash2, Pencil, FolderOpen, FolderSearch, LogOut, MoreVertical, Moon, Settings, Sun, User as UserIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,6 +31,12 @@ import {
 import { useTheme, type ThemePreference } from "@/components/theme-provider";
 import { UpdateBanner } from "@/components/update-banner";
 import { Input } from "@/components/ui/input";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import {
   Sidebar,
   SidebarContent,
@@ -142,7 +147,7 @@ export function SidePanel({
                 className="inline-flex border  rounded-full h-5 w-5 min-h-5 min-w-5 max-h-5 max-w-5 shrink-0 items-center justify-center  p-0 text-muted-foreground shadow-none transition-colors hover:bg-muted/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label="Account menu"
               >
-                <HugeiconsIcon icon={UserIcon} size={10} strokeWidth={1} className="shrink-0" />
+                <UserIcon size={10} strokeWidth={1} className="shrink-0" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-52">
                 <div className="px-2 py-1.5">
@@ -151,11 +156,11 @@ export function SidePanel({
                 </div>
                 <DropdownMenuSeparator />
                 <DropdownMenuSub>
-                  <DropdownMenuSubTrigger className="flex items-center gap-2"><HugeiconsIcon icon={SettingsIcon} size={10} strokeWidth={1} className="shrink-0" /> Settings</DropdownMenuSubTrigger>
+                  <DropdownMenuSubTrigger className="flex items-center gap-2"><Settings size={10} strokeWidth={1} className="shrink-0" /> Settings</DropdownMenuSubTrigger>
                   <DropdownMenuSubContent className="min-w-44">
                     <DropdownMenuGroup>
                       <DropdownMenuLabel className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <HugeiconsIcon icon={SunIcon} size={10} strokeWidth={1} className="shrink-0" />
+                        <Sun size={10} strokeWidth={1} className="shrink-0" />
                         <span>Theme</span>
                       </DropdownMenuLabel>
                       <DropdownMenuRadioGroup
@@ -167,15 +172,15 @@ export function SidePanel({
                         }}
                       >
                         <DropdownMenuRadioItem value="light" className="gap-2">
-                          <HugeiconsIcon icon={SunIcon} size={10} strokeWidth={1} className="shrink-0 text-muted-foreground" />
+                          <Sun size={10} strokeWidth={1} className="shrink-0 text-muted-foreground" />
                           <span>Light</span>
                         </DropdownMenuRadioItem>
                         <DropdownMenuRadioItem value="dark" className="gap-2">
-                          <HugeiconsIcon icon={Moon02Icon} size={10} strokeWidth={1} className="shrink-0 text-muted-foreground" />
+                          <Moon size={10} strokeWidth={1} className="shrink-0 text-muted-foreground" />
                           <span>Dark</span>
                         </DropdownMenuRadioItem>
                         <DropdownMenuRadioItem value="system" className="gap-2">
-                          <HugeiconsIcon icon={ComputerIcon} size={10} strokeWidth={1} className="shrink-0 text-muted-foreground" />
+                          <Monitor size={10} strokeWidth={1} className="shrink-0 text-muted-foreground" />
                           <span>System</span>
                         </DropdownMenuRadioItem>
                       </DropdownMenuRadioGroup>
@@ -183,7 +188,7 @@ export function SidePanel({
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={onLogout} className="flex items-center gap-2"><HugeiconsIcon icon={LogoutIcon} size={10} strokeWidth={1} className="shrink-0" /> Log out</DropdownMenuItem>
+                <DropdownMenuItem onClick={onLogout} className="flex items-center gap-2"><LogOut size={10} strokeWidth={1} className="shrink-0" /> Log out</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -229,11 +234,11 @@ export function SidePanel({
                             onClick={(event) => event.stopPropagation()}
                             onMouseDown={(event) => event.stopPropagation()}
                           >
-                            <HugeiconsIcon icon={MenuIcon} size={14} strokeWidth={2} className="shrink-0" />
+                            <MoreVertical size={14} strokeWidth={2} className="shrink-0" />
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-44">
                             <DropdownMenuItem onClick={() => onSelectProject(path)}>
-                              <HugeiconsIcon icon={FolderOpenIcon} size={14} strokeWidth={2} className="shrink-0" />
+                              <FolderOpen size={14} strokeWidth={2} className="shrink-0" />
                               Open project
                             </DropdownMenuItem>
                             <DropdownMenuItem
@@ -242,17 +247,17 @@ export function SidePanel({
                                 setRenameValue(projectLabel(path));
                               }}
                             >
-                              <HugeiconsIcon icon={Edit02Icon} size={14} strokeWidth={2} className="shrink-0" />
+                              <Pencil size={14} strokeWidth={2} className="shrink-0" />
                               Modify
                             </DropdownMenuItem>
                             <DropdownMenuSub>
                               <DropdownMenuSubTrigger>
-                                <HugeiconsIcon icon={FolderViewIcon} size={14} strokeWidth={2} className="shrink-0" />
+                                <FolderSearch size={14} strokeWidth={2} className="shrink-0" />
                                 Open in…
                               </DropdownMenuSubTrigger>
                               <DropdownMenuSubContent className="w-44">
                                 <DropdownMenuItem onClick={() => onRevealProject(path)}>
-                                  <HugeiconsIcon icon={FolderOpenIcon} size={14} strokeWidth={2} className="shrink-0" />
+                                  <FolderOpen size={14} strokeWidth={2} className="shrink-0" />
                                   Reveal in folder
                                 </DropdownMenuItem>
                               </DropdownMenuSubContent>
@@ -262,7 +267,7 @@ export function SidePanel({
                               variant="destructive"
                               onClick={() => setDeleteTargetPath(path)}
                             >
-                              <HugeiconsIcon icon={Delete02Icon} size={14} strokeWidth={2} className="shrink-0" />
+                              <Trash2 size={14} strokeWidth={2} className="shrink-0" />
                               Delete
                             </DropdownMenuItem>
                           </DropdownMenuContent>
@@ -388,7 +393,7 @@ function NewProjectDialog({
           />
         }
       >
-        <HugeiconsIcon icon={Add01Icon} size={14} />
+        <Plus size={14} />
         New project
       </DialogTrigger>
       <DialogContent>
@@ -396,38 +401,28 @@ function NewProjectDialog({
           <DialogTitle>Create new project</DialogTitle>
         </DialogHeader>
 
-        {baseDirectory ? (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="shrink-0"><HugeiconsIcon icon={FolderOpenIcon} size={14} strokeWidth={2} className="shrink-0" /></span>
-            <span className="min-w-0 truncate">{baseDirectory}</span>
-            <Button
-              variant="link"
-              size="xs"
-              className="h-auto shrink-0 p-0"
-              onClick={onChangeBase}
-            >
-              change
-            </Button>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2 rounded-lg border border-dashed border-border p-3">
-            <p className="text-xs text-muted-foreground">
-              Choose a folder where new projects will be created.
-            </p>
-            <Button variant="outline" size="sm" onClick={onChangeBase}>
-              Pick location…
-            </Button>
-          </div>
-        )}
-        <div className="flex flex-col gap-2">
-        <Label className="text-xs font-normal">Choose a name for your project folder</Label>
-        <Input
-          value={projectName}
-          onChange={(e) => onSetName(e.target.value)}
-          placeholder="Project name"
-          onKeyDown={(e) => { if (e.key === "Enter" && baseDirectory) onCreate(); }}
-          autoFocus
-        />
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-xs font-normal">Choose a name for your project folder</Label>
+          <InputGroup>
+            <InputGroupInput
+              value={projectName}
+              onChange={(e) => onSetName(e.target.value)}
+              placeholder="Project name"
+              onKeyDown={(e) => { if (e.key === "Enter" && baseDirectory) onCreate(); }}
+              autoFocus
+            />
+            <InputGroupAddon align="inline-end">
+              <InputGroupButton
+                size="icon-xs"
+                onClick={onChangeBase}
+                disabled={creating}
+                aria-label="Change location"
+                title={baseDirectory ?? "Choose a location"}
+              >
+                <FolderOpen />
+              </InputGroupButton>
+            </InputGroupAddon>
+          </InputGroup>
         </div>
         <div className="flex flex-col gap-2">
           <Label className="text-xs font-normal">Framework</Label>
