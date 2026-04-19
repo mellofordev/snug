@@ -67,7 +67,7 @@ function detectFramework(root: string): Framework {
 // `TEMPLATE_REF` in the next desktop release.
 // The template for each framework lives at `packages/scaffold/templates/<framework>/`.
 const TEMPLATE_REPO = "mellofordev/snug";
-const TEMPLATE_REF = "templates-v1";
+const TEMPLATE_REF = "templates-v2";
 const TEMPLATES_ROOT = "packages/scaffold/templates";
 
 function templateTarballUrl(): string {
