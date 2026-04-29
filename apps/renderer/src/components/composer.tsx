@@ -40,7 +40,12 @@ interface ComposerProps {
   isRunning: boolean;
   playerRunning: boolean;
   playerStarting: boolean;
-  composerImages: { id: string; previewUrl: string }[];
+  composerImages: {
+    id: string;
+    name: string;
+    previewUrl: string;
+    mediaType: "image" | "video";
+  }[];
   onSetPrompt: (value: string) => void;
   onSelectAgent: (id: AgentId) => void;
   onAddComposerImages: (files: File[]) => void;
@@ -329,7 +334,9 @@ export function Composer({
       dragDepth.current = 0;
       setDropHover(false);
       const files = Array.from(e.dataTransfer.files).filter(
-        (f) => f.type.startsWith("image/") && f.size > 0
+        (f) =>
+          f.size > 0 &&
+          (f.type.startsWith("image/") || f.type.startsWith("video/"))
       );
       if (files.length) onAddComposerImages(files);
     },
@@ -372,12 +379,28 @@ export function Composer({
               <div
                 key={img.id}
                 className="group relative h-14 w-14 shrink-0 overflow-hidden rounded-md border border-border bg-background"
+                title={img.name}
               >
-                <img
-                  src={img.previewUrl}
-                  alt=""
-                  className="size-full object-cover"
-                />
+                {img.mediaType === "video" ? (
+                  <>
+                    <video
+                      src={img.previewUrl}
+                      className="size-full object-cover"
+                      muted
+                      playsInline
+                      preload="metadata"
+                    />
+                    <span className="absolute right-1 bottom-1 rounded bg-black/70 px-1 py-0.5 text-[9px] font-medium leading-none text-white">
+                      VID
+                    </span>
+                  </>
+                ) : (
+                  <img
+                    src={img.previewUrl}
+                    alt=""
+                    className="size-full object-cover"
+                  />
+                )}
                 {canAttach && (
                   <button
                     type="button"
@@ -405,7 +428,7 @@ export function Composer({
             onSelect={(e) => syncCursor(e.currentTarget)}
             onClick={(e) => syncCursor(e.currentTarget)}
             onKeyUp={(e) => syncCursor(e.currentTarget)}
-            placeholder="Describe the video… Type @ for a project file. Paste or drop reference images."
+            placeholder="Describe the video… Type @ for a project file. Paste or drop image/video assets."
             title="⌘↵ generate · @ to reference a project file"
             className="max-h-28 min-h-[52px] resize-none border-0 bg-transparent px-4 pt-3.5 pb-2 text-sm shadow-none placeholder:text-muted-foreground/50 focus-visible:ring-0"
             maxLength={10000}
@@ -417,7 +440,10 @@ export function Composer({
             if (!cd) return;
 
             for (const item of Array.from(cd.items ?? [])) {
-              if (item.kind === "file" && item.type.startsWith("image/")) {
+              if (
+                item.kind === "file" &&
+                (item.type.startsWith("image/") || item.type.startsWith("video/"))
+              ) {
                 const file = item.getAsFile();
                 if (file && file.size > 0) {
                   e.preventDefault();
@@ -431,7 +457,11 @@ export function Composer({
             if (files?.length) {
               for (let i = 0; i < files.length; i++) {
                 const file = files.item(i);
-                if (file && file.type.startsWith("image/") && file.size > 0) {
+                if (
+                  file &&
+                  file.size > 0 &&
+                  (file.type.startsWith("image/") || file.type.startsWith("video/"))
+                ) {
                   e.preventDefault();
                   onAddComposerImages([file]);
                   return;

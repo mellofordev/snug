@@ -70,11 +70,15 @@ export const renderHistoryItemSchema = z.object({
   createdAt: z.string()
 });
 
-/** Save a pasted clipboard image into the project (under `.snug/pasted/`). */
+/** Save a composer image/video asset into the project public assets folder. */
 export const projectWriteClipboardAssetSchema = z.object({
   workingDirectory: z.string().min(1),
-  dataBase64: z.string().min(1).max(36_000_000),
-  mimeType: z.string().min(1).max(128)
+  dataBase64: z.string().min(1).max(700_000_000).optional(),
+  sourcePath: z.string().min(1).max(4096).optional(),
+  mimeType: z.string().min(1).max(128),
+  originalName: z.string().min(1).max(255).optional()
+}).refine((input) => input.dataBase64 || input.sourcePath, {
+  message: "Either dataBase64 or sourcePath is required."
 });
 
 export const projectWriteClipboardAssetResultSchema = z.object({

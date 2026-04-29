@@ -52,11 +52,9 @@ export default function App() {
           onLogin={() => void auth.login()}
           baseDirectory={state.baseDirectory}
           projectName={state.newProjectName}
-          framework={state.selectedFramework}
           creating={state.creatingProject}
           createStage={state.createStage}
           onSetName={state.setNewProjectName}
-          onSetFramework={state.setSelectedFramework}
           onChangeBase={() => void state.onChangeBaseDirectory()}
           onCreate={() => void state.onCreateProject()}
         />
@@ -79,7 +77,6 @@ export default function App() {
             baseDirectory={state.baseDirectory}
             sidebarNewProjectOpen={state.sidebarNewProjectOpen}
             newProjectName={state.newProjectName}
-            selectedFramework={state.selectedFramework}
             creatingProject={state.creatingProject}
             createStage={state.createStage}
             onSelectProject={(path) => void state.setAndPersistDirectory(path)}
@@ -90,7 +87,6 @@ export default function App() {
             onCreateProject={() => void state.onCreateProject()}
             onChangeBaseDirectory={() => void state.onChangeBaseDirectory()}
             onSetNewProjectName={state.setNewProjectName}
-            onSetSelectedFramework={state.setSelectedFramework}
             onCloseSidebarNewProject={() => state.setSidebarNewProjectOpen(false)}
             updateStatus={state.updateStatus}
             onDismissUpdate={state.dismissUpdate}

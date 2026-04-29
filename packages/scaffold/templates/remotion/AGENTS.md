@@ -41,6 +41,8 @@ entries. This file only documents the Snug-scaffold pieces around it.
   `vite.config.ts`, `package.json`, `bun.lock`, `tsconfig.json`,
   `.claude/`, `.codex/`, `system-prompt/`.
 - **Yours to edit:** `compositions/*.tsx` and (optionally) `public/` assets.
+- User-provided image/video assets are copied to `public/snug-assets/`.
+  In Remotion code, reference them with `staticFile("snug-assets/<file>")`.
 - `src/Root.tsx` uses `require.context("../compositions", false, /\.tsx$/)`
   for the Remotion CLI bundle; `src/player/App.tsx` uses
   `import.meta.glob("../../compositions/*.tsx", { eager: true })` for the

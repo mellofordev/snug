@@ -1,11 +1,10 @@
 import * as React from "react";
 
-import type { Framework, User } from "@acme/contracts";
+import type { User } from "@acme/contracts";
 
 import { Badge } from "@/components/ui/badge";
 
 import { CreateProjectStep } from "./create-project-step";
-import { FrameworkStep } from "./framework-step";
 import { LoginStep } from "./login-step";
 
 function ProgressBar({ step, totalSteps }: { step: number; totalSteps: number }) {
@@ -32,34 +31,23 @@ export interface OnboardingProps {
   onLogin: () => void;
   baseDirectory: string | null;
   projectName: string;
-  framework: Framework;
   creating: boolean;
   createStage: "scaffold" | "install" | "player" | null;
   onSetName: (name: string) => void;
-  onSetFramework: (framework: Framework) => void;
   onChangeBase: () => void;
   onCreate: () => void;
 }
 
-type ProjectSubStep = "framework" | "details";
-
-type StepKey = "login" | "framework" | "details";
+type StepKey = "login" | "details";
 
 export function Onboarding(props: OnboardingProps) {
-  const [projectSubStep, setProjectSubStep] = React.useState<ProjectSubStep>("framework");
   const includesLoginRef = React.useRef(!props.user);
   const includesLogin = includesLoginRef.current;
 
-  const totalSteps = includesLogin ? 3 : 2;
-  const activeKey: StepKey = !props.user ? "login" : projectSubStep;
+  const totalSteps = includesLogin ? 2 : 1;
+  const activeKey: StepKey = !props.user ? "login" : "details";
 
-  let step: number;
-  if (!props.user) {
-    step = 1;
-  } else {
-    const projectStep = projectSubStep === "framework" ? 1 : 2;
-    step = includesLogin ? projectStep + 1 : projectStep;
-  }
+  const step = !props.user ? 1 : includesLogin ? 2 : 1;
 
   const previousKeyRef = React.useRef<StepKey>(activeKey);
   const direction: "forward" | "backward" =
@@ -68,39 +56,24 @@ export function Onboarding(props: OnboardingProps) {
     previousKeyRef.current = activeKey;
   }, [activeKey]);
 
-  let stepContent: React.ReactNode;
-  if (!props.user) {
-    stepContent = (
-      <LoginStep
-        loading={props.authLoading}
-        error={props.authError}
-        onLogin={props.onLogin}
-      />
-    );
-  } else if (projectSubStep === "framework") {
-    stepContent = (
-      <FrameworkStep
-        framework={props.framework}
-        onSetFramework={props.onSetFramework}
-        onContinue={() => setProjectSubStep("details")}
-      />
-    );
-  } else {
-    stepContent = (
-      <CreateProjectStep
-        user={props.user}
-        baseDirectory={props.baseDirectory}
-        projectName={props.projectName}
-        framework={props.framework}
-        creating={props.creating}
-        createStage={props.createStage}
-        onSetName={props.onSetName}
-        onChangeBase={props.onChangeBase}
-        onCreate={props.onCreate}
-        onBack={() => setProjectSubStep("framework")}
-      />
-    );
-  }
+  const stepContent = !props.user ? (
+    <LoginStep
+      loading={props.authLoading}
+      error={props.authError}
+      onLogin={props.onLogin}
+    />
+  ) : (
+    <CreateProjectStep
+      user={props.user}
+      baseDirectory={props.baseDirectory}
+      projectName={props.projectName}
+      creating={props.creating}
+      createStage={props.createStage}
+      onSetName={props.onSetName}
+      onChangeBase={props.onChangeBase}
+      onCreate={props.onCreate}
+    />
+  );
 
   return (
     <main
@@ -137,9 +110,7 @@ function keyOrder(key: StepKey): number {
   switch (key) {
     case "login":
       return 0;
-    case "framework":
-      return 1;
     case "details":
-      return 2;
+      return 1;
   }
 }

@@ -12,7 +12,7 @@ import type { User } from "./auth";
 import type { UpdateStatus } from "./update";
 
 /** Scaffold templates available under `packages/scaffold/templates/<framework>/`. */
-export const FRAMEWORKS = ["remotion", "hyperframes"] as const;
+export const FRAMEWORKS = ["remotion"] as const;
 export type Framework = (typeof FRAMEWORKS)[number];
 export function isFramework(value: unknown): value is Framework {
   return typeof value === "string" && (FRAMEWORKS as readonly string[]).includes(value);
@@ -86,7 +86,7 @@ export interface NativeApi {
     setBackgroundColor: (color: string) => Promise<void>;
   };
   project: {
-    init: (dir: string, framework: Framework) => Promise<{ success: boolean; error?: string }>;
+    init: (dir: string) => Promise<{ success: boolean; error?: string }>;
     startPlayer: (dir: string) => Promise<{ url: string }>;
     stopPlayer: (dir: string) => Promise<void>;
     render: (dir: string, compositionId: string) => Promise<void>;
@@ -98,6 +98,7 @@ export interface NativeApi {
     writeClipboardAsset: (
       input: ProjectWriteClipboardAssetInput
     ) => Promise<ProjectWriteClipboardAssetResult>;
+    getPathForFile: (file: unknown) => string | null;
     /** Relative POSIX paths from project root for @-mentions in the composer. */
     listFiles: (projectDir: string) => Promise<string[]>;
   };

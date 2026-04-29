@@ -15,3 +15,6 @@ Hard rules, always:
 2. Every composition file exports a default React component plus the
    metadata constants `fps`, `durationInFrames`, `width`, `height`. File
    name is the composition id.
+3. User-provided image/video assets may be copied under
+   `public/snug-assets/`. Reference them from Remotion with
+   `staticFile("snug-assets/<file>")`.
