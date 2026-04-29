@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from "electro
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
-import { isFramework, projectWriteClipboardAssetSchema, promptInputSchema } from "@acme/contracts";
+import { projectWriteClipboardAssetSchema, promptInputSchema } from "@acme/contracts";
 
 import { IPC_CHANNELS } from "./ipcChannels";
 import { detectAgents, runPrompt, stopPrompt } from "./agentManager";
@@ -192,10 +192,9 @@ function registerIpcHandlers(): void {
 
   // ── Project handlers ──────────────────────────────────────────────
 
-  ipcMain.handle(IPC_CHANNELS.projectInit, async (_event, dir: unknown, framework: unknown) => {
+  ipcMain.handle(IPC_CHANNELS.projectInit, async (_event, dir: unknown) => {
     if (typeof dir !== "string") throw new Error("Invalid directory");
-    if (!isFramework(framework)) throw new Error("Invalid framework");
-    return initProject(dir, framework);
+    return initProject(dir);
   });
 
   ipcMain.handle(IPC_CHANNELS.projectStartPlayer, async (_event, dir: unknown) => {
@@ -249,7 +248,9 @@ function registerIpcHandlers(): void {
     return writeClipboardAsset(
       input.workingDirectory,
       input.dataBase64,
-      input.mimeType
+      input.mimeType,
+      input.originalName,
+      input.sourcePath
     );
   });
 

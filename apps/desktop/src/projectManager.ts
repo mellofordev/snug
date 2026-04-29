@@ -7,7 +7,7 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
-import type { CompositionFile, Framework, RenderHistoryItem, RenderProgress } from "@acme/contracts";
+import type { CompositionFile, RenderHistoryItem, RenderProgress } from "@acme/contracts";
 import { RENDER_SCRIPT } from "@acme/scaffold";
 
 /**
@@ -23,41 +23,12 @@ function resourcePathForExec(absPath: string): string {
 
 const resolvedRenderScript = resourcePathForExec(RENDER_SCRIPT);
 
-/** Canonical scripts per framework (match the scaffold templates under `packages/scaffold/templates/<framework>/`). */
-const DEFAULT_SCAFFOLD_SCRIPTS: Record<Framework, Record<"player" | "studio" | "render", string>> = {
-  remotion: {
-    player: "vite",
-    studio: "remotion studio",
-    render: "remotion render"
-  },
-  hyperframes: {
-    player: "vite",
-    studio: "hyperframes preview",
-    render: "hyperframes render"
-  }
+/** Canonical scripts for Remotion projects. */
+const DEFAULT_SCAFFOLD_SCRIPTS: Record<"player" | "studio" | "render", string> = {
+  player: "vite",
+  studio: "remotion studio",
+  render: "remotion render"
 };
-
-/**
- * Detect the project's framework from its package.json dependencies. Used by
- * render/preview/list because the `Framework` is only recorded in the IPC at init
- * time — at run time we inspect the installed deps. Falls back to `"remotion"` so
- * existing projects (created before hyperframes support) keep working unchanged.
- */
-function detectFramework(root: string): Framework {
-  const pkgPath = path.join(root, "package.json");
-  if (!existsSync(pkgPath)) return "remotion";
-  try {
-    const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as {
-      dependencies?: Record<string, string>;
-      devDependencies?: Record<string, string>;
-    };
-    const all = { ...pkg.dependencies, ...pkg.devDependencies };
-    if (all["hyperframes"] || all["@hyperframes/player"]) return "hyperframes";
-    return "remotion";
-  } catch {
-    return "remotion";
-  }
-}
 
 // ── Template source (GitHub tarball) ────────────────────────────────────
 // Fetched from the monorepo on project init — no API, no R2. Templates are
@@ -74,8 +45,8 @@ function templateTarballUrl(): string {
   return `https://codeload.github.com/${TEMPLATE_REPO}/tar.gz/refs/tags/${TEMPLATE_REF}`;
 }
 
-function templateSubpath(framework: Framework): string {
-  return `${TEMPLATES_ROOT}/${framework}`;
+function templateSubpath(): string {
+  return `${TEMPLATES_ROOT}/remotion`;
 }
 
 /**
@@ -83,14 +54,14 @@ function templateSubpath(framework: Framework): string {
  * That prefix plus the template subpath must be stripped so only template contents
  * land at the project root.
  */
-function templateStripComponents(framework: Framework): number {
+function templateStripComponents(): number {
   // "<repo>-<ref>" + each segment of the template subpath
-  return 1 + templateSubpath(framework).split("/").filter(Boolean).length;
+  return 1 + templateSubpath().split("/").filter(Boolean).length;
 }
 
-function tarballInternalPrefix(framework: Framework): string {
+function tarballInternalPrefix(): string {
   const repoName = TEMPLATE_REPO.split("/").pop() ?? "snug";
-  return `${repoName}-${TEMPLATE_REF}/${templateSubpath(framework)}`;
+  return `${repoName}-${TEMPLATE_REF}/${templateSubpath()}`;
 }
 
 async function downloadTarball(url: string, destPath: string): Promise<void> {
@@ -112,8 +83,7 @@ async function downloadTarball(url: string, destPath: string): Promise<void> {
 
 async function extractTemplate(
   tarPath: string,
-  projectRoot: string,
-  framework: Framework
+  projectRoot: string
 ): Promise<void> {
   await fs.mkdir(projectRoot, { recursive: true });
   await new Promise<void>((resolve, reject) => {
@@ -124,8 +94,8 @@ async function extractTemplate(
         tarPath,
         "-C",
         projectRoot,
-        `--strip-components=${templateStripComponents(framework)}`,
-        tarballInternalPrefix(framework)
+        `--strip-components=${templateStripComponents()}`,
+        tarballInternalPrefix()
       ],
       { stdio: ["ignore", "pipe", "pipe"] }
     );
@@ -236,8 +206,7 @@ function isProcessAlive(pid: number): boolean {
 // ── Project Initialization ──────────────────────────────────────────────
 
 export async function initProject(
-  dir: string,
-  framework: Framework
+  dir: string
 ): Promise<{ success: boolean; error?: string }> {
   let root: string;
   try {
@@ -257,7 +226,7 @@ export async function initProject(
     }
 
     await downloadTarball(templateTarballUrl(), tarPath);
-    await extractTemplate(tarPath, root, framework);
+    await extractTemplate(tarPath, root);
     await fs.mkdir(path.join(root, "output"), { recursive: true });
 
     const pkgAfterCopy = path.join(root, "package.json");
@@ -333,7 +302,7 @@ function mergeDefaultScaffoldScripts(root: string): void {
     return;
   }
 
-  const defaults = DEFAULT_SCAFFOLD_SCRIPTS[detectFramework(root)];
+  const defaults = DEFAULT_SCAFFOLD_SCRIPTS;
   const keys = ["player", "studio", "render"] as const;
   let changed = false;
   pkg.scripts = pkg.scripts ?? {};
@@ -547,21 +516,8 @@ export function stopAllPlayers(): void {
 export async function listCompositions(dir: string): Promise<CompositionFile[]> {
   const root = resolveProjectRoot(dir);
   const compositionsDir = path.join(root, "compositions");
-  const framework = detectFramework(root);
   try {
     const entries = await fs.readdir(compositionsDir, { withFileTypes: true });
-    if (framework === "hyperframes") {
-      // Each composition is a directory containing `index.html`.
-      const results: CompositionFile[] = [];
-      for (const e of entries) {
-        if (!e.isDirectory()) continue;
-        const indexPath = path.join(compositionsDir, e.name, "index.html");
-        if (existsSync(indexPath)) {
-          results.push({ name: e.name, path: indexPath });
-        }
-      }
-      return results;
-    }
     // Remotion: `compositions/<id>.tsx`.
     return entries
       .filter((e) => e.isFile() && e.name.endsWith(".tsx"))
@@ -583,27 +539,19 @@ export async function deleteComposition(
   if (!id) {
     throw new Error("Invalid composition name.");
   }
-  const framework = detectFramework(root);
   const files = await listCompositions(dir);
   const match = files.find((f) => f.name === id);
   if (!match) {
     throw new Error("Composition not found.");
   }
   const compositionsDir = path.resolve(path.join(root, "compositions"));
-  // For hyperframes we remove the whole composition directory; for remotion just the .tsx file.
-  const resolvedTarget = path.resolve(
-    framework === "hyperframes" ? path.join(compositionsDir, id) : match.path
-  );
+  const resolvedTarget = path.resolve(match.path);
   const relativeToCompositions = path.relative(compositionsDir, resolvedTarget);
   if (relativeToCompositions.startsWith("..") || path.isAbsolute(relativeToCompositions)) {
     throw new Error("Invalid composition path.");
   }
   try {
-    if (framework === "hyperframes") {
-      await fs.rm(resolvedTarget, { recursive: true, force: false });
-    } else {
-      await fs.unlink(resolvedTarget);
-    }
+    await fs.unlink(resolvedTarget);
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "ENOENT") {
@@ -698,8 +646,7 @@ export async function renderComposition(
 
   onProgress({ status: "rendering", progress: 0 });
 
-  const framework = detectFramework(root);
-  const child = spawn("bash", [resolvedRenderScript, root, compositionId, outputPath, framework], {
+  const child = spawn("bash", [resolvedRenderScript, root, compositionId, outputPath], {
     env: buildEnv(),
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -788,47 +735,83 @@ export async function listOutputs(dir: string): Promise<RenderHistoryItem[]> {
   }
 }
 
-// ── Clipboard pasted images (composer) ─────────────────────────────────
+// ── Composer media assets ───────────────────────────────────────────────
 
-const CLIPBOARD_MIME_TO_EXT: Record<string, string> = {
+const COMPOSER_ASSET_MIME_TO_EXT: Record<string, string> = {
   "image/png": "png",
   "image/jpeg": "jpg",
   "image/jpg": "jpg",
   "image/gif": "gif",
   "image/webp": "webp",
-  "image/avif": "avif"
+  "image/avif": "avif",
+  "image/svg+xml": "svg",
+  "video/mp4": "mp4",
+  "video/quicktime": "mov",
+  "video/webm": "webm",
+  "video/ogg": "ogv",
+  "video/x-m4v": "m4v"
 };
 
-const MAX_CLIPBOARD_IMAGE_BYTES = 25 * 1024 * 1024;
+const MAX_COMPOSER_ASSET_BYTES = 500 * 1024 * 1024;
+
+function sanitizeAssetName(name: string | undefined): string {
+  const parsed = path.parse(name ?? "");
+  const base = parsed.name
+    .normalize("NFKD")
+    .replace(/[^\w.-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+  return base || "asset";
+}
 
 export async function writeClipboardAsset(
   dir: string,
-  dataBase64: string,
-  mimeType: string
+  dataBase64: string | undefined,
+  mimeType: string,
+  originalName?: string,
+  sourcePath?: string
 ): Promise<{ relativePath: string }> {
   const root = resolveProjectRoot(dir);
   const normalizedMime =
     mimeType
       .toLowerCase()
       .split(";")[0]
-      ?.trim() ?? "image/png";
-  const ext = CLIPBOARD_MIME_TO_EXT[normalizedMime] ?? "png";
-  const relDir = ".snug/pasted";
+      ?.trim() ?? "application/octet-stream";
+  const originalExt = path.extname(originalName ?? "").replace(/^\./, "").toLowerCase();
+  const ext = originalExt || (COMPOSER_ASSET_MIME_TO_EXT[normalizedMime] ?? "bin");
+  const relDir = "public/snug-assets";
   const outDir = path.join(root, relDir);
   await fs.mkdir(outDir, { recursive: true });
-  const fileName = `${randomUUID()}.${ext}`;
+  const fileName = `${sanitizeAssetName(originalName)}-${randomUUID()}.${ext}`;
   const fullPath = path.join(outDir, fileName);
+  if (sourcePath) {
+    const sourceStat = await fs.stat(sourcePath);
+    if (!sourceStat.isFile()) {
+      throw new Error("Asset source is not a file.");
+    }
+    if (sourceStat.size === 0) {
+      throw new Error("Empty asset data.");
+    }
+    if (sourceStat.size > MAX_COMPOSER_ASSET_BYTES) {
+      throw new Error("Asset too large (max 500MB).");
+    }
+    await fs.copyFile(sourcePath, fullPath);
+    return { relativePath: `${relDir}/${fileName}` };
+  }
+  if (!dataBase64) {
+    throw new Error("Missing asset data.");
+  }
   let buffer: Buffer;
   try {
     buffer = Buffer.from(dataBase64, "base64");
   } catch {
-    throw new Error("Invalid base64 image data.");
+    throw new Error("Invalid base64 asset data.");
   }
   if (buffer.length === 0) {
-    throw new Error("Empty image data.");
+    throw new Error("Empty asset data.");
   }
-  if (buffer.length > MAX_CLIPBOARD_IMAGE_BYTES) {
-    throw new Error("Image too large (max 25MB).");
+  if (buffer.length > MAX_COMPOSER_ASSET_BYTES) {
+    throw new Error("Asset too large (max 500MB).");
   }
   await fs.writeFile(fullPath, buffer);
   return { relativePath: `${relDir}/${fileName}` };

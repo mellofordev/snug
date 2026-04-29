@@ -202,10 +202,7 @@ export function VideoPreview({
                         <DropdownMenuItem
                           key={c.id}
                           className="flex items-center justify-between gap-1.5 pr-1"
-                          onSelect={(e) => {
-                            e.preventDefault();
-                            onSelectComposition(c.id);
-                          }}
+                          onClick={() => onSelectComposition(c.id)}
                         >
                           <span className="flex min-w-0 flex-1 items-center gap-2">
                             {effectiveCompositionId === c.id ? (

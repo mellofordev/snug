@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { FRAMEWORKS, type Framework, type NativeApi, type PromptOutput, type UpdateStatus, type User } from "@acme/contracts";
+import { type NativeApi, type PromptOutput, type UpdateStatus, type User } from "@acme/contracts";
 import { Plus, Monitor, Trash2, Pencil, FolderOpen, FolderSearch, LogOut, MoreVertical, Moon, Settings, Sun, User as UserIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -68,7 +68,6 @@ interface SidePanelProps {
   baseDirectory: string | null;
   sidebarNewProjectOpen: boolean;
   newProjectName: string;
-  selectedFramework: Framework;
   creatingProject: boolean;
   createStage: "scaffold" | "install" | "player" | null;
   updateStatus: UpdateStatus | null;
@@ -81,7 +80,6 @@ interface SidePanelProps {
   onCreateProject: () => void;
   onChangeBaseDirectory: () => void;
   onSetNewProjectName: (name: string) => void;
-  onSetSelectedFramework: (framework: Framework) => void;
   onCloseSidebarNewProject: () => void;
   onLogout: () => void;
 }
@@ -96,7 +94,6 @@ export function SidePanel({
   baseDirectory,
   sidebarNewProjectOpen,
   newProjectName,
-  selectedFramework,
   creatingProject,
   createStage,
   updateStatus,
@@ -109,7 +106,6 @@ export function SidePanel({
   onCreateProject,
   onChangeBaseDirectory,
   onSetNewProjectName,
-  onSetSelectedFramework,
   onCloseSidebarNewProject,
   onLogout
 }: SidePanelProps) {
@@ -291,14 +287,12 @@ export function SidePanel({
             open={sidebarNewProjectOpen}
             baseDirectory={baseDirectory}
             projectName={newProjectName}
-            framework={selectedFramework}
             creating={creatingProject}
             createStage={createStage}
             isRunning={isRunning}
             onOpen={onNewProject}
             onClose={onCloseSidebarNewProject}
             onSetName={onSetNewProjectName}
-            onSetFramework={onSetSelectedFramework}
             onChangeBase={onChangeBaseDirectory}
             onCreate={onCreateProject}
           />
@@ -343,35 +337,26 @@ interface NewProjectDialogProps {
   open: boolean;
   baseDirectory: string | null;
   projectName: string;
-  framework: Framework;
   creating: boolean;
   createStage: "scaffold" | "install" | "player" | null;
   isRunning: boolean;
   onOpen: () => void;
   onClose: () => void;
   onSetName: (name: string) => void;
-  onSetFramework: (framework: Framework) => void;
   onChangeBase: () => void;
   onCreate: () => void;
 }
-
-const FRAMEWORK_LABEL: Record<Framework, string> = {
-  remotion: "Remotion",
-  hyperframes: "Hyperframes"
-};
 
 function NewProjectDialog({
   open,
   baseDirectory,
   projectName,
-  framework,
   creating,
   createStage,
   isRunning,
   onOpen,
   onClose,
   onSetName,
-  onSetFramework,
   onChangeBase,
   onCreate
 }: NewProjectDialogProps) {
@@ -423,24 +408,6 @@ function NewProjectDialog({
               </InputGroupButton>
             </InputGroupAddon>
           </InputGroup>
-        </div>
-        <div className="flex flex-col gap-2">
-          <Label className="text-xs font-normal">Framework</Label>
-          <div className="flex gap-2">
-            {FRAMEWORKS.map((fw) => (
-              <Button
-                key={fw}
-                type="button"
-                variant={framework === fw ? "default" : "outline"}
-                size="sm"
-                className="flex-1"
-                onClick={() => onSetFramework(fw)}
-                disabled={creating}
-              >
-                {FRAMEWORK_LABEL[fw]}
-              </Button>
-            ))}
-          </div>
         </div>
         <DialogFooter className="flex-col items-stretch gap-2 sm:flex-col">
           {createStage && (

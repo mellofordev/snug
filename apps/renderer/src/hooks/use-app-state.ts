@@ -4,7 +4,6 @@ import type {
   Agent,
   AgentId,
   ChatMessage,
-  Framework,
   NativeApi,
   PromptOutput,
   RenderHistoryItem,
@@ -90,7 +89,27 @@ interface CompositionItem {
   };
 }
 
-const MAX_COMPOSER_IMAGES = 12;
+const MAX_COMPOSER_ASSETS = 12;
+
+type ComposerAsset = {
+  id: string;
+  file: File;
+  name: string;
+  previewUrl: string;
+  mediaType: "image" | "video";
+};
+
+type ComposerAssetPreview = Pick<
+  ComposerAsset,
+  "id" | "name" | "previewUrl" | "mediaType"
+>;
+
+function isSupportedComposerAsset(file: File): boolean {
+  return (
+    file.size > 0 &&
+    (file.type.startsWith("image/") || file.type.startsWith("video/"))
+  );
+}
 
 async function blobToBase64Payload(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -126,8 +145,8 @@ export interface AppState {
 
   prompt: string;
   setPrompt: (value: string) => void;
-  /** Staged reference images (shown as thumbnails); included in the next agent run. */
-  composerImages: { id: string; previewUrl: string }[];
+  /** Staged reference assets; copied into public/ and included in the next agent run. */
+  composerImages: ComposerAssetPreview[];
   addComposerImages: (files: File[]) => void;
   removeComposerImage: (id: string) => void;
 
@@ -143,8 +162,6 @@ export interface AppState {
   setSidebarNewProjectOpen: (open: boolean) => void;
   newProjectName: string;
   setNewProjectName: (name: string) => void;
-  selectedFramework: Framework;
-  setSelectedFramework: (framework: Framework) => void;
   creatingProject: boolean;
   createStage: "scaffold" | "install" | "player" | null;
   onNewProject: () => void;
@@ -199,25 +216,23 @@ export function useAppState(api: NativeApi | undefined): AppState {
     writeLocalString(SELECTED_AGENT_KEY, id || null);
   }, []);
   const [prompt, setPrompt] = useState("");
-  const [composerImages, setComposerImages] = useState<
-    { id: string; blob: Blob; previewUrl: string }[]
-  >([]);
+  const [composerImages, setComposerImages] = useState<ComposerAsset[]>([]);
 
   const addComposerImages = useCallback((files: File[]) => {
-    const incoming = Array.from(files).filter(
-      (f) => f.type.startsWith("image/") && f.size > 0
-    );
+    const incoming = Array.from(files).filter(isSupportedComposerAsset);
     if (!incoming.length) return;
     setComposerImages((prev) => {
-      const room = MAX_COMPOSER_IMAGES - prev.length;
+      const room = MAX_COMPOSER_ASSETS - prev.length;
       const take = incoming.slice(0, Math.max(0, room));
       const added = take.map((file) => ({
         id:
           typeof crypto !== "undefined" && "randomUUID" in crypto
             ? crypto.randomUUID()
             : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        blob: file as Blob,
-        previewUrl: URL.createObjectURL(file)
+        file,
+        name: file.name || "asset",
+        previewUrl: URL.createObjectURL(file),
+        mediaType: file.type.startsWith("video/") ? "video" as const : "image" as const
       }));
       return [...prev, ...added];
     });
@@ -257,7 +272,6 @@ export function useAppState(api: NativeApi | undefined): AppState {
   const [baseDirectory, setBaseDirectory] = useState<string | null>(null);
   const [sidebarNewProjectOpen, setSidebarNewProjectOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
-  const [selectedFramework, setSelectedFramework] = useState<Framework>("remotion");
   const [creatingProject, setCreatingProject] = useState(false);
   const [createStage, setCreateStage] = useState<"scaffold" | "install" | "player" | null>(null);
 
@@ -605,7 +619,7 @@ export function useAppState(api: NativeApi | undefined): AppState {
 
       // Run scaffold: copies template files + bun install
       setCreateStage("install");
-      const result = await api.project.init(created, selectedFramework);
+      const result = await api.project.init(created);
       if (!result.success) {
         setError(`Project setup failed: ${result.error}`);
         setCreatingProject(false);
@@ -623,7 +637,7 @@ export function useAppState(api: NativeApi | undefined): AppState {
       setCreatingProject(false);
       setCreateStage(null);
     }
-  }, [api, baseDirectory, newProjectName, selectedFramework, setAndPersistDirectory]);
+  }, [api, baseDirectory, newProjectName, setAndPersistDirectory]);
 
   const onChangeBaseDirectory = useCallback(async () => {
     if (!api) return;
@@ -811,21 +825,33 @@ export function useAppState(api: NativeApi | undefined): AppState {
 
     const paths: string[] = [];
     try {
-      for (const img of composerImages) {
-        const dataBase64 = await blobToBase64Payload(img.blob);
+      for (const asset of composerImages) {
+        const sourcePath = api.project.getPathForFile(asset.file);
+        const dataBase64 = sourcePath
+          ? undefined
+          : await blobToBase64Payload(asset.file);
         const { relativePath } = await api.project.writeClipboardAsset({
           workingDirectory,
-          dataBase64,
-          mimeType: img.blob.type || "image/png"
+          ...(dataBase64 ? { dataBase64 } : {}),
+          ...(sourcePath ? { sourcePath } : {}),
+          mimeType: asset.file.type || "application/octet-stream",
+          originalName: asset.name
         });
         paths.push(relativePath);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save images.");
+      setError(e instanceof Error ? e.message : "Failed to save assets.");
       return;
     }
 
-    const pathsBlock = paths.join("\n");
+    const pathsBlock = paths
+      .map((relativePath) => {
+        const publicPath = relativePath.startsWith("public/")
+          ? relativePath.slice("public/".length)
+          : relativePath;
+        return `- ${relativePath} (Remotion: staticFile("${publicPath}"))`;
+      })
+      .join("\n");
     let fullPrompt: string;
     if (trimmed && paths.length) fullPrompt = `${trimmed}\n\n${pathsBlock}`;
     else if (trimmed) fullPrompt = trimmed;
@@ -890,9 +916,11 @@ export function useAppState(api: NativeApi | undefined): AppState {
     detectAgents,
     prompt,
     setPrompt,
-    composerImages: composerImages.map(({ id, previewUrl }) => ({
+    composerImages: composerImages.map(({ id, name, previewUrl, mediaType }) => ({
       id,
-      previewUrl
+      name,
+      previewUrl,
+      mediaType
     })),
     addComposerImages,
     removeComposerImage,
@@ -907,8 +935,6 @@ export function useAppState(api: NativeApi | undefined): AppState {
     setSidebarNewProjectOpen,
     newProjectName,
     setNewProjectName,
-    selectedFramework,
-    setSelectedFramework,
     creatingProject,
     createStage,
     onNewProject,
